@@ -1,0 +1,36 @@
+{
+  "name": "pkbldr",
+  "version": "0.0.0",
+  "description": "Frontend part of the Gowebly project.",
+  "license": "MIT",
+  "browserslist": "> 0.5%, last 2 versions, not dead",
+  "source": [
+    "./assets/scripts.js",
+    "./assets/styles.scss",
+    "./assets/favicon.svg"
+  ],
+  "targets": {
+    "default": {
+      "distDir": "./static"
+    }
+  },
+  "scripts": {
+    "watch": "parcel watch",
+    "fmt": "prettier --write .",
+    "dev": "parcel build --no-optimize",
+    "build": "parcel build"
+  },
+  "dependencies": {
+    "@parcel/optimizer-esbuild": "^2.12.0",
+    "@tailwindcss/typography": "latest",
+    "daisyui": "latest",
+    "htmx.org": "latest",
+    "hyperscript.org": "latest",
+    "tailwindcss": "latest"
+  },
+  "devDependencies": {
+    "@parcel/transformer-sass": "latest",
+    "parcel": "latest",
+    "prettier": "latest"
+  }
+}

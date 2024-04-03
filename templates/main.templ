@@ -1,0 +1,56 @@
+package templates
+
+import "pkbldr/templates/pages"
+
+templ Layout(title string, metaTags, bodyContent templ.Component, isNotMainPage bool) {
+	<!DOCTYPE html>
+	<html data-theme="pika" lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<meta http-equiv="X-UA-Compatible" content="ie=edge"/>
+			<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:*; img-src 'self' data:*;"/>
+			<meta name="theme-color" content="#FEFEF5"/>
+			<title>{ title }</title>
+			@metaTags
+			<link rel="icon" href="/static/favicon.svg" type="image/svg+xml"/>
+			<link href="/static/styles.css" rel="stylesheet"/>
+		</head>
+		<body class="prose max-w-full max-h-full h-full w-full" onload={ pages.BodyScripts() }>
+			<div class="bg-base-200 flex flex-col h-full" id="app">
+				<div class="text-base-content">
+					<div class="navbar bg-base-300">
+						<div class="navbar-start">
+							<div class="dropdown">
+								<div tabindex="0" role="button" class="btn btn-ghost btn-circle">
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+								</div>
+								<ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-300 rounded-box w-52">
+									<li><a href="/">Home</a></li>
+									<li><a href="/packages">Packages</a></li>
+									<li><a>Build Logs</a></li>
+									<li><a>Settings</a></li>
+								</ul>
+							</div>
+						</div>
+						<div class="navbar-center">
+							<a class="btn btn-ghost text-xl bg-logo h-10 self-center w-60 bg-center"></a>
+						</div>
+						<div class="navbar-end">
+							<button class="btn btn-ghost btn-circle">
+								<div class="indicator">
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+									<span class="badge badge-xs badge-primary indicator-item"></span>
+								</div>
+							</button>
+						</div>
+					</div>
+				</div>
+				@bodyContent
+			</div>
+			if !isNotMainPage {
+				<script src="/static/scripts.js"></script>
+			}
+		</body>
+	</html>
+}

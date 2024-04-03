@@ -1,0 +1,62 @@
+package pages
+
+// MetaTags defines meta tags.
+templ MetaTags(keywords, description string) {
+	<meta name="keywords" content={ keywords }/>
+	<meta name="description" content={ description }/>
+}
+
+// styledTextStyles defines CSS styles for component.
+
+css styledTextStyles() {
+	color: #02BF87;
+}
+
+// BodyContent defines HTML content.
+templ BodyContent(numPackages, numStale, numQueued, numBuilding, numMising, numErrored, lastUpdate string) {
+	<h1 class="mt-8 text-center">Welcome to the PikaOS Package Builder!</h1>
+	<div class="mt-4 stats flex-wrap self-center stats-vertical lg:stats-horizontal shadow">
+		<div class="stat">
+			<div class="stat-title">Repo Size</div>
+			<div class="stat-value">{ numPackages }</div>
+			<div class="stat-desc">Packages currently served by our repos</div>
+		</div>
+		<div class="stat">
+			<div class="stat-title">Pending Updates</div>
+			<div class="stat-value">{ numStale }</div>
+			<div class="stat-desc">Packages awaiting update in next build</div>
+		</div>
+		<div class="stat">
+			<div class="stat-title">Queue Size</div>
+			<div class="stat-value">{ numQueued }</div>
+			<div class="stat-desc">Packages currently queued for building</div>
+		</div>
+		</div>
+		<div class="mt-4 stats flex-wrap self-center stats-vertical lg:stats-horizontal shadow">
+		<div class="stat">
+			<div class="stat-title">Amount Building</div>
+			<div class="stat-value">{ numBuilding }</div>
+			<div class="stat-desc">Packages currently being built</div>
+		</div>
+		<div class="stat">
+			<div class="stat-title">Amount Missing</div>
+			<div class="stat-value">{ numMising }</div>
+			<div class="stat-desc">Packages currently missing from our repos</div>
+		</div>
+		<div class="stat">
+			<div class="stat-title">Amount Errored</div>
+			<div class="stat-value">{ numErrored }</div>
+			<div class="stat-desc">Packages currently erroring on build</div>
+		</div>
+	</div>
+	<h5 class="mt-8 text-center">Stats last updated: { lastUpdate }</h5>
+}
+
+// BodyScripts defines JavaScript code.
+
+script BodyScripts() {
+	// console.log(
+	// 	"You're using Templ package to generate HTML content!",
+	// 	"Edit this JavaScript code in the `./templates/pages/index.templ` file.",
+	// );
+}
