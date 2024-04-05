@@ -17,13 +17,15 @@ type User struct {
 
 // Struct representing an individual package file entries
 type PackageFile struct {
-	Name        string   `json:"name"`
-	Url         string   `json:"url"`
-	Subrepos    []string `json:"subrepos"`
-	Priority    int      `json:"priority"`
-	Blacklist   []string `json:"blacklist"`
-	Packagepath string   `json:"packagepath"`
-	Compression string   `json:"compression"`
+	Name         string   `json:"name"`
+	Url          string   `json:"url"`
+	Subrepos     []string `json:"subrepos"`
+	Priority     int      `json:"priority"`
+	UseWhitelist bool     `json:"usewhitelist"`
+	Whitelist    []string `json:"whitelist"`
+	Blacklist    []string `json:"blacklist"`
+	Packagepath  string   `json:"packagepath"`
+	Compression  string   `json:"compression"`
 }
 
 // Struct for the overall configuration

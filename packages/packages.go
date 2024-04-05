@@ -267,6 +267,14 @@ func fetchPackageFile(pkg config.PackageFile, selectedRepo string) (map[string]P
 			break
 		}
 
+		useWhitelist := pkg.UseWhitelist && len(pkg.Whitelist) > 0
+		if useWhitelist {
+			contained := slices.Contains(pkg.Whitelist, stanza["Package"])
+			if !contained {
+				continue
+			}
+		}
+
 		broken := slices.Contains(pkg.Blacklist, stanza["Package"])
 		if broken {
 			continue

@@ -89,9 +89,6 @@ func runServer() error {
 
 	server.Get("/packages", packagesPageHandler)
 
-	// Handle API endpoints.
-	server.Get("/api/hello-world", showContentAPIHandler)
-
 	return server.Listen(fmt.Sprintf(":%d", port))
 }
 
