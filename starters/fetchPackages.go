@@ -3,31 +3,20 @@ package starters
 import (
 	"context"
 	"fmt"
-	"pkbldr/config"
 	"pkbldr/workflows"
 	"time"
 
 	"go.temporal.io/sdk/client"
 )
 
-func FetchPackagesNow() {
-
-	// Create the client object just once per process
-	c, err := client.Dial(client.Options{
-		HostPort: config.Configs.TemporalUrl,
-	})
-	if err != nil {
-		fmt.Println("unable to create Temporal client", err)
-	}
-	defer c.Close()
-
+func FetchPackagesNow(c client.Client) {
 	options := client.StartWorkflowOptions{
 		ID:        "startup-package-fetch-workflow",
 		TaskQueue: workflows.PACKAGE_FETCH_TASK_QUEUE,
 	}
 
 	// Start the Workflow
-	_, err = c.ExecuteWorkflow(context.Background(), options, workflows.FetchPackages)
+	_, err := c.ExecuteWorkflow(context.Background(), options, workflows.FetchPackages)
 	if err != nil {
 		fmt.Println("unable to complete startup package fetch Workflow", err)
 	} else {
@@ -35,18 +24,10 @@ func FetchPackagesNow() {
 	}
 }
 
-func ScheduleFetchPackages() {
-	c, err := client.Dial(client.Options{
-		HostPort: config.Configs.TemporalUrl,
-	})
-	if err != nil {
-		fmt.Println("unable to create Temporal client", err)
-	}
-	defer c.Close()
-
+func ScheduleFetchPackages(c client.Client) {
 	scheduleID := "package-fetch-schedule"
 	workflowID := "scheduled-package-fetch-workflow"
-	_, err = c.ScheduleClient().Create(context.Background(), client.ScheduleOptions{
+	_, err := c.ScheduleClient().Create(context.Background(), client.ScheduleOptions{
 		ID: scheduleID,
 		Spec: client.ScheduleSpec{
 			Jitter: 1 * time.Minute,

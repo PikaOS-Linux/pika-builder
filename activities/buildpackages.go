@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"pkbldr/packages"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"golang.org/x/exp/slog"
 )
 
 func UpdateDockerContainer(ctx context.Context) error {
@@ -40,6 +44,10 @@ func UpdateDockerContainer(ctx context.Context) error {
 			return err
 		}
 	}
+
+	cli.ContainerRemove(ctx, containerName, types.ContainerRemoveOptions{Force: true})
+	forceKillContainers(ctx, cli, containerName)
+	cli.ImageRemove(ctx, imageName, types.ImageRemoveOptions{Force: true, PruneChildren: true})
 
 	fmt.Println("Pulling image...")
 	out, err := cli.ImagePull(ctx, imageName, types.ImagePullOptions{})
@@ -133,106 +141,246 @@ func StartBuildLoop(ctx context.Context, pkgsToBuild []packages.PackageInfo) err
 		}
 	}
 
-	// Create the container
-	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image:      imageName,
-		WorkingDir: containerDir,
-		Cmd:        []string{"tail", "-f", "/dev/null"}, // Keep container running
-		Tty:        true,                                // Allocate a pseudo-TTY
-	}, &container.HostConfig{
-		Privileged: true,
-		Binds:      []string{fmt.Sprintf("%s:%s", hostDir, containerDir)},
-	}, nil, nil, containerName)
+	forceKillContainers(ctx, cli, containerName)
+	containers, err := createContainers(ctx, cli, containerName, hostDir, containerDir, imageName)
 	if err != nil {
 		return err
 	}
 
-	// Start the container
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+	for _, pkg := range pkgsToBuild {
+		pkg.Status.Status = packages.Queued
+		packages.UpdatePackage(pkg)
+	}
+
+	fmt.Println("Build loop started")
+	// Loop through the packages and build them
+	err = buildBatch(pkgsToBuild, cli, containers, hostDir)
+	if err != nil {
 		return err
 	}
 
-	// Loop through the packages and build them
-	for _, pkg := range pkgsToBuild {
-		dir, err := os.MkdirTemp(hostDir, pkg.Name)
-		if err != nil {
-			return err
-		}
-
-		pkgdirs := strings.Split(dir, "/")
-		pkgdir := pkgdirs[len(pkgdirs)-1]
-
-		command := "cd " + pkgdir + " && apt-get source " + pkg.Name + " -y"
-		// Execute the command
-		execResp, err := cli.ContainerExecCreate(ctx, resp.ID, types.ExecConfig{
-			AttachStdout: true,
-			AttachStderr: true,
-			Cmd:          []string{"sh", "-c", command},
-			Tty:          true,
-			Privileged:   true,
-		})
-		if err != nil {
-			return err
-		}
-
-		// Attach to the command's output
-		output, err := cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
-		if err != nil {
-			return err
-		}
-		defer output.Close()
-
-		// Stream the command's output to your console
-		io.Copy(os.Stdout, output.Reader)
-
-		// Command to execute inside the container
-		command = "cd " + pkgdir + " && pika-pbuilder-amd64-v3-lto-build *.dsc"
-
-		// Execute the command
-		execResp, err = cli.ContainerExecCreate(ctx, resp.ID, types.ExecConfig{
-			AttachStdout: true,
-			AttachStderr: true,
-			Cmd:          []string{"sh", "-c", command},
-			Tty:          true,
-			Privileged:   true,
-		})
-		if err != nil {
-			return err
-		}
-
-		// Attach to the command's output
-		output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
-		if err != nil {
-			return err
-		}
-		defer output.Close()
-
-		// Stream the command's output to your console
-		io.Copy(os.Stdout, output.Reader)
-
-		buildErr := true
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			if filepath.Ext(entry.Name()) == ".deb" {
-				buildErr = false
-			}
-		}
-		if buildErr {
-			fmt.Println("Build failed for " + pkg.Name)
-		} else {
-			fmt.Println("Build succeeded for " + pkg.Name)
-		}
-
-		os.RemoveAll(dir)
+	err = packages.SaveToDb()
+	if err != nil {
+		return err
 	}
 
 	// Clean up (optional - you might want to keep the container)
 	fmt.Println("Stopping and removing container...")
-	cli.ContainerStop(ctx, resp.ID, container.StopOptions{})
-	cli.ContainerRemove(ctx, resp.ID, types.ContainerRemoveOptions{})
+	for _, containerID := range containers {
+		cli.ContainerStop(ctx, containerID, container.StopOptions{})
+		cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{})
+	}
 	fmt.Printf("Build loop took %s\n", time.Since(start))
+	return nil
+}
+
+func createContainers(ctx context.Context, cli *client.Client, containerName string, hostDir string, containerDir string, imageName string) ([]string, error) {
+	containers := make([]string, 0)
+	for i := 0; i < 8; i++ {
+		resp, err := cli.ContainerCreate(ctx, &container.Config{
+			Image:      imageName,
+			WorkingDir: containerDir,
+			Cmd:        []string{"tail", "-f", "/dev/null"}, // Keep container running
+			Tty:        true,                                // Allocate a pseudo-TTY
+		}, &container.HostConfig{
+			Privileged: true,
+			Binds:      []string{fmt.Sprintf("%s:%s", hostDir, containerDir)},
+		}, nil, nil, containerName+"-"+strconv.Itoa(i))
+		if err != nil {
+			return nil, err
+		}
+
+		// Start the container
+		if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+			return nil, err
+		}
+		containers = append(containers, resp.ID)
+	}
+
+	return containers, nil
+}
+
+func forceKillContainers(ctx context.Context, cli *client.Client, containerName string) {
+	for i := 0; i < 8; i++ {
+		cli.ContainerRemove(ctx, containerName+"-"+strconv.Itoa(i), types.ContainerRemoveOptions{Force: true})
+	}
+}
+
+func buildBatch(packages []packages.PackageInfo, cli *client.Client, containers []string, hostDir string) error {
+	packageQueue := make(chan int, 8)
+	// Create a worker pool with 8
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		cont := containers[i]
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case pack, ok := <-packageQueue:
+					if !ok {
+						return
+					}
+					err := buildPackage(context.Background(), packages[pack], cli, cont, hostDir)
+					if err != nil {
+						return
+					}
+
+				default:
+					// No more packages to process, exit the goroutine
+					return
+				}
+			}
+		}()
+	}
+
+	// Add the packages to the queue
+	for i := range packages {
+		packageQueue <- i
+	}
+
+	// Close the queue to signal the workers to stop
+	close(packageQueue)
+
+	// Wait for all the workers to finish
+	wg.Wait()
+	return nil
+}
+
+func buildPackage(ctx context.Context, pkg packages.PackageInfo, cli *client.Client, respid string, hostDir string) error {
+	pkg.Status.Status = packages.Building
+	packages.UpdatePackage(pkg)
+
+	// Create a temporary directory for the package
+	dir, err := os.MkdirTemp(hostDir, pkg.Name)
+	if err != nil {
+		return err
+	}
+
+	pkgdirs := strings.Split(dir, "/")
+	pkgdir := pkgdirs[len(pkgdirs)-1]
+
+	buildVersion := pkg.Status.NewVersion
+	if buildVersion == "" {
+		buildVersion = pkg.Version
+	}
+
+	command := "cd " + pkgdir + " && apt-get source " + pkg.Name + "=" + buildVersion + " -y"
+	// Execute the command
+	execResp, err := cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
+		AttachStdout: true,
+		AttachStderr: true,
+		Cmd:          []string{"sh", "-c", command},
+		Tty:          true,
+		Privileged:   true,
+	})
+	if err != nil {
+		os.RemoveAll(dir)
+		slog.Error(err.Error())
+		pkg.Status.Status = packages.Error
+		packages.UpdatePackage(pkg)
+		return nil
+	}
+
+	// Attach to the command's output
+	output, err := cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
+	if err != nil {
+		os.RemoveAll(dir)
+		slog.Error(err.Error())
+		pkg.Status.Status = packages.Error
+		packages.UpdatePackage(pkg)
+		return nil
+	}
+
+	io.Copy(io.Discard, output.Reader)
+	output.Close()
+
+	// Command to execute inside the container
+	command = "cd " + pkgdir + " && pika-pbuilder-amd64-v3-lto-build *.dsc"
+
+	// Execute the command
+	execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
+		AttachStdout: true,
+		AttachStderr: true,
+		Cmd:          []string{"sh", "-c", command},
+		Tty:          true,
+		Privileged:   true,
+	})
+	if err != nil {
+		os.RemoveAll(dir)
+		slog.Error(err.Error())
+		pkg.Status.Status = packages.Error
+		packages.UpdatePackage(pkg)
+		return nil
+	}
+
+	// start the command
+	output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
+	if err != nil {
+		os.RemoveAll(dir)
+		slog.Error(err.Error())
+		pkg.Status.Status = packages.Error
+		packages.UpdatePackage(pkg)
+		return nil
+	}
+
+	io.Copy(io.Discard, output.Reader)
+	output.Close()
+
+	// Check if there is a build
+	buildErr := true
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		os.RemoveAll(dir)
+		slog.Error(err.Error())
+		pkg.Status.Status = packages.Error
+		packages.UpdatePackage(pkg)
+		return nil
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), "dbgsym") {
+			os.Remove(dir + "/" + entry.Name())
+			continue
+		}
+		if strings.Contains(entry.Name(), "_source") {
+			os.Remove(dir + "/" + entry.Name())
+			continue
+		}
+		if filepath.Ext(entry.Name()) == ".deb" {
+			buildErr = false
+			continue
+		}
+	}
+	if buildErr {
+		fmt.Println("No build output for " + pkg.Name)
+		os.RemoveAll(dir)
+		pkg.Status.Status = packages.Error
+		packages.UpdatePackage(pkg)
+		return nil
+	} else {
+		fmt.Println("Build succeeded for " + pkg.Name)
+		pkg.Status.Status = packages.Built
+		pkg.Version = buildVersion
+		packages.UpdatePackage(pkg)
+		// Save to repo
+		cmd := exec.Command("/bin/sh", "-c", "aptly repo add -force-replace -remove-files pika-canary "+dir)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		err := cmd.Run()
+		if err != nil {
+			return err
+		}
+		// publish updated repo
+		cmd = exec.Command("/bin/sh", "-c", "aptly publish update -batch -skip-contents -force-overwrite pika filesystem:pikarepo:")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+	}
+	os.RemoveAll(dir)
 	return nil
 }

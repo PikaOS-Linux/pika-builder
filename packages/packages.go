@@ -9,6 +9,7 @@ import (
 	"pkbldr/db"
 	"pkbldr/deb"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -68,6 +69,16 @@ func ProcessPackages() error {
 type packs struct {
 	ID   string        `json:"id"`
 	Pkgs []PackageInfo `json:"pkgs"`
+}
+
+func UpdatePackage(pkg PackageInfo) {
+	for i, v := range packagesSlice {
+		if pkg.Name == v.Name {
+			packagesSlice[i] = pkg
+			LastUpdateTime = time.Now()
+			break
+		}
+	}
 }
 
 func SaveToDb() error {
@@ -219,8 +230,9 @@ func ProcessStalePackages(internalPackages map[string]PackageInfo, externalPacka
 			continue
 		}
 
+		splitver := strings.Split(v.Version, "+b")
 		matchedVer, _ := version.Parse(matchedPackage.Version)
-		extVer, _ := version.Parse(v.Version)
+		extVer, _ := version.Parse(splitver[0])
 		cmpVal := version.Compare(matchedVer, extVer)
 		if cmpVal < 0 {
 			newStatus := Status{
@@ -277,6 +289,11 @@ func fetchPackageFile(pkg config.PackageFile, selectedRepo string) (map[string]P
 
 		broken := slices.Contains(pkg.Blacklist, stanza["Package"])
 		if broken {
+			continue
+		}
+
+		dbgsym := strings.Contains(stanza["Package"], "-dbgsym")
+		if dbgsym {
 			continue
 		}
 
