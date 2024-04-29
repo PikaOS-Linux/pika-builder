@@ -162,11 +162,6 @@ func StartBuildLoop(ctx context.Context) error {
 		return err
 	}
 
-	err = packages.SaveToDb()
-	if err != nil {
-		return err
-	}
-
 	// Clean up (optional - you might want to keep the container)
 	fmt.Println("Stopping and removing container...")
 	for _, containerID := range containers {

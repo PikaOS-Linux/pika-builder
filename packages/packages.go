@@ -28,13 +28,9 @@ func GetPackagesSlice() []PackageInfo {
 }
 
 func ProcessPackages() error {
-	err := LoadFromDb()
-	if err != nil {
-		return err
-	}
 	var internalPackages = make(map[string]PackageInfo)
 	var externalPackages = make(map[string]PackageInfo)
-	err = LoadInternalPackages(internalPackages)
+	err := LoadInternalPackages(internalPackages)
 	if err != nil {
 		return err
 	}
@@ -71,11 +67,16 @@ func ProcessPackages() error {
 			}
 		}
 		if !found {
+			pkg2.LastBuildStatus = ""
 			updatedPackagesSlice = append(updatedPackagesSlice, pkg2)
 		}
 	}
 	LastUpdateTime = time.Now()
 	err = SaveToDb()
+	if err != nil {
+		return err
+	}
+	err = LoadFromDb()
 	if err != nil {
 		return err
 	}
@@ -87,16 +88,20 @@ type PackageBuildQueue map[string][]PackageInfo
 func GetBuildQueue() PackageBuildQueue {
 	buildQueue := make(map[string][]PackageInfo)
 	for _, pkg := range packagesSlice {
-		if !(pkg.Status == Missing || pkg.Status == Stale) || pkg.LastBuildStatus == Error {
+		if !(pkg.Status == Missing || pkg.Status == Stale) {
 			continue
 		}
 
-		existing, ok := buildQueue[pkg.Source]
+		key := pkg.Source
+		if key == "" {
+			key = pkg.Name
+		}
+		existing, ok := buildQueue[key]
 		if !ok {
 			existing = make([]PackageInfo, 0)
 		}
 		existing = append(existing, pkg)
-		buildQueue[pkg.Source] = existing
+		buildQueue[key] = existing
 	}
 	return buildQueue
 }
@@ -368,6 +373,7 @@ func fetchPackageFile(pkg config.PackageFile, selectedRepo string) (map[string]P
 		packages[stanza["Package"]] = PackageInfo{
 			Name:         stanza["Package"],
 			Version:      ver.String(),
+			Source:       stanza["Source"],
 			Architecture: stanza["Architecture"],
 			Description:  stanza["Description"],
 			Status:       Uptodate,

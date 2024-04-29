@@ -61,7 +61,6 @@ func runServer() error {
 
 	go startTemporalFetchWorker(c)
 	go startTemporalBuildWorker(c)
-	packages.LoadFromDb()
 	go starters.FetchPackagesNow(c)
 	go starters.ScheduleFetchPackages(c)
 	go starters.BuildPackagesNow(c)
