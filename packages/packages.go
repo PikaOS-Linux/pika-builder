@@ -281,19 +281,14 @@ func fetchPackageFile(pkg config.PackageFile, selectedRepo string) (map[string]P
 
 		useWhitelist := pkg.UseWhitelist && len(pkg.Whitelist) > 0
 		if useWhitelist {
-			contained := slices.Contains(pkg.Whitelist, stanza["Package"])
+			contained := nameContains(stanza["Package"], pkg.Whitelist)
 			if !contained {
 				continue
 			}
 		}
 
-		broken := slices.Contains(pkg.Blacklist, stanza["Package"])
+		broken := nameContains(stanza["Package"], pkg.Blacklist)
 		if broken {
-			continue
-		}
-
-		dbgsym := strings.Contains(stanza["Package"], "-dbgsym")
-		if dbgsym {
 			continue
 		}
 
@@ -314,6 +309,15 @@ func fetchPackageFile(pkg config.PackageFile, selectedRepo string) (map[string]P
 	}
 
 	return packages, nil
+}
+
+func nameContains(name string, match []string) bool {
+	for _, m := range match {
+		if strings.Contains(name, m) {
+			return true
+		}
+	}
+	return false
 }
 
 func GetPackagesCount() PackagesCount {

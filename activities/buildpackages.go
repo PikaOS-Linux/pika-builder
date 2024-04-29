@@ -176,7 +176,7 @@ func StartBuildLoop(ctx context.Context, pkgsToBuild []packages.PackageInfo) err
 
 func createContainers(ctx context.Context, cli *client.Client, containerName string, hostDir string, containerDir string, imageName string) ([]string, error) {
 	containers := make([]string, 0)
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 4; i++ {
 		resp, err := cli.ContainerCreate(ctx, &container.Config{
 			Image:      imageName,
 			WorkingDir: containerDir,
@@ -201,16 +201,16 @@ func createContainers(ctx context.Context, cli *client.Client, containerName str
 }
 
 func forceKillContainers(ctx context.Context, cli *client.Client, containerName string) {
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 4; i++ {
 		cli.ContainerRemove(ctx, containerName+"-"+strconv.Itoa(i), types.ContainerRemoveOptions{Force: true})
 	}
 }
 
 func buildBatch(packages []packages.PackageInfo, cli *client.Client, containers []string, hostDir string) error {
-	packageQueue := make(chan int, 8)
-	// Create a worker pool with 8
+	packageQueue := make(chan int, 4)
+	// Create a worker pool with 4
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 4; i++ {
 		cont := containers[i]
 		wg.Add(1)
 		go func() {
