@@ -61,6 +61,7 @@ func runServer() error {
 
 	go startTemporalFetchWorker(c)
 	go startTemporalBuildWorker(c)
+	packages.LoadFromDb()
 	go starters.FetchPackagesNow(c)
 	go starters.ScheduleFetchPackages(c)
 	go starters.BuildPackagesNow(c)
@@ -111,6 +112,7 @@ func startTemporalBuildWorker(c client.Client) {
 	w.RegisterWorkflow(workflows.BuildPackages)
 	w.RegisterActivity(activities.StartBuildLoop)
 	w.RegisterActivity(activities.UpdateDockerContainer)
+	w.RegisterActivity(activities.FetchPackages)
 
 	// Start listening to the Task Queue
 	err := w.Run(worker.InterruptCh())

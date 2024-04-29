@@ -20,10 +20,14 @@ templ BodyContent(packages []packages.PackageInfo, page int, nextPage string, pr
 				<tr class="flex w-full justify-center items-center">
 					<th class="w-1/12"></th>
 					<th class="w-2/12">Name</th>
-					<th class="w-2/12">Version</th>
-					<th class="w-5/12">Description</th>
+					<th class="w-1/12">Current Version</th>
+					<th class="w-1/12">New Version</th>
+					<th class="w-1/12">Last Build Version</th>
+					<th class="w-3/12">Description</th>
 					<th class="w-1/12">Architecture</th>
-					<th class="w-1/12">Status</th>
+					<th class="w-1/12">Current Status</th>
+					<th class="w-1/12">Last Build Status</th>
+
 				</tr>
 			</thead>
 			<tbody>
@@ -32,10 +36,13 @@ templ BodyContent(packages []packages.PackageInfo, page int, nextPage string, pr
 						<tr class="flex w-full justify-center items-center">
 							<th class="w-1/12">{ strconv.Itoa(count + 1) }</th>
 							<td class="w-2/12 break-words">{ pkg.Name }</td>
-							<td class="w-2/12 break-words">{ pkg.Version }</td>
-							<td class="w-5/12 break-words">{ pkg.Description }</td>
+							<td class="w-1/12 break-words">{ pkg.Version }</td>
+							<th class="w-1/12">{ pkg.PendingVersion }</th>
+							<th class="w-1/12">{ pkg.LastBuildVersion }</th>
+							<td class="w-3/12 break-words">{ pkg.Description }</td>
 							<td class="w-1/12 break-words">{ pkg.Architecture }</td>
-							<td class="w-1/12">{ string(pkg.Status.Status) }</td>
+							<td class="w-1/12">{ string(pkg.Status) }</td>
+							<td class="w-1/12">{ string(pkg.LastBuildStatus) }</td>
 						</tr>
 					}
 				}

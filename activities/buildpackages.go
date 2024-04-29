@@ -114,8 +114,9 @@ func UpdateDockerContainer(ctx context.Context) error {
 
 }
 
-func StartBuildLoop(ctx context.Context, pkgsToBuild []packages.PackageInfo) error {
+func StartBuildLoop(ctx context.Context) error {
 
+	pkgsToBuild := packages.GetBuildQueue()
 	start := time.Now()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -148,8 +149,10 @@ func StartBuildLoop(ctx context.Context, pkgsToBuild []packages.PackageInfo) err
 	}
 
 	for _, pkg := range pkgsToBuild {
-		pkg.Status.Status = packages.Queued
-		packages.UpdatePackage(pkg)
+		for _, pkg2 := range pkg {
+			pkg2.Status = packages.Queued
+			packages.UpdatePackage(pkg2, false)
+		}
 	}
 
 	fmt.Println("Build loop started")
@@ -206,8 +209,8 @@ func forceKillContainers(ctx context.Context, cli *client.Client, containerName 
 	}
 }
 
-func buildBatch(packages []packages.PackageInfo, cli *client.Client, containers []string, hostDir string) error {
-	packageQueue := make(chan int, 4)
+func buildBatch(packs packages.PackageBuildQueue, cli *client.Client, containers []string, hostDir string) error {
+	packageQueue := make(chan []packages.PackageInfo, 4)
 	// Create a worker pool with 4
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
@@ -221,11 +224,10 @@ func buildBatch(packages []packages.PackageInfo, cli *client.Client, containers 
 					if !ok {
 						return
 					}
-					err := buildPackage(context.Background(), packages[pack], cli, cont, hostDir)
+					err := buildPackage(context.Background(), pack, cli, cont, hostDir)
 					if err != nil {
-						return
+						slog.Error(err.Error())
 					}
-
 				default:
 					// No more packages to process, exit the goroutine
 					return
@@ -235,8 +237,8 @@ func buildBatch(packages []packages.PackageInfo, cli *client.Client, containers 
 	}
 
 	// Add the packages to the queue
-	for i := range packages {
-		packageQueue <- i
+	for _, v := range packs {
+		packageQueue <- v
 	}
 
 	// Close the queue to signal the workers to stop
@@ -247,9 +249,12 @@ func buildBatch(packages []packages.PackageInfo, cli *client.Client, containers 
 	return nil
 }
 
-func buildPackage(ctx context.Context, pkg packages.PackageInfo, cli *client.Client, respid string, hostDir string) error {
-	pkg.Status.Status = packages.Building
-	packages.UpdatePackage(pkg)
+func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.Client, respid string, hostDir string) error {
+	pkg := pkgs[0]
+	for _, pkg2 := range pkgs {
+		pkg2.Status = packages.Building
+		packages.UpdatePackage(pkg2, false)
+	}
 
 	// Create a temporary directory for the package
 	dir, err := os.MkdirTemp(hostDir, pkg.Name)
@@ -260,10 +265,11 @@ func buildPackage(ctx context.Context, pkg packages.PackageInfo, cli *client.Cli
 	pkgdirs := strings.Split(dir, "/")
 	pkgdir := pkgdirs[len(pkgdirs)-1]
 
-	buildVersion := pkg.Status.NewVersion
+	buildVersion := pkg.PendingVersion
 	if buildVersion == "" {
 		buildVersion = pkg.Version
 	}
+	pkg.LastBuildVersion = buildVersion
 
 	command := "cd " + pkgdir + " && apt-get source " + pkg.Name + "=" + buildVersion + " -y"
 	// Execute the command
@@ -277,8 +283,10 @@ func buildPackage(ctx context.Context, pkg packages.PackageInfo, cli *client.Cli
 	if err != nil {
 		os.RemoveAll(dir)
 		slog.Error(err.Error())
-		pkg.Status.Status = packages.Error
-		packages.UpdatePackage(pkg)
+		for _, pkg2 := range pkgs {
+			pkg2.LastBuildStatus = packages.Error
+			packages.UpdatePackage(pkg2, true)
+		}
 		return nil
 	}
 
@@ -287,8 +295,10 @@ func buildPackage(ctx context.Context, pkg packages.PackageInfo, cli *client.Cli
 	if err != nil {
 		os.RemoveAll(dir)
 		slog.Error(err.Error())
-		pkg.Status.Status = packages.Error
-		packages.UpdatePackage(pkg)
+		for _, pkg2 := range pkgs {
+			pkg2.LastBuildStatus = packages.Error
+			packages.UpdatePackage(pkg2, true)
+		}
 		return nil
 	}
 
@@ -309,8 +319,10 @@ func buildPackage(ctx context.Context, pkg packages.PackageInfo, cli *client.Cli
 	if err != nil {
 		os.RemoveAll(dir)
 		slog.Error(err.Error())
-		pkg.Status.Status = packages.Error
-		packages.UpdatePackage(pkg)
+		for _, pkg2 := range pkgs {
+			pkg2.LastBuildStatus = packages.Error
+			packages.UpdatePackage(pkg2, true)
+		}
 		return nil
 	}
 
@@ -319,8 +331,10 @@ func buildPackage(ctx context.Context, pkg packages.PackageInfo, cli *client.Cli
 	if err != nil {
 		os.RemoveAll(dir)
 		slog.Error(err.Error())
-		pkg.Status.Status = packages.Error
-		packages.UpdatePackage(pkg)
+		for _, pkg2 := range pkgs {
+			pkg2.LastBuildStatus = packages.Error
+			packages.UpdatePackage(pkg2, true)
+		}
 		return nil
 	}
 
@@ -333,8 +347,10 @@ func buildPackage(ctx context.Context, pkg packages.PackageInfo, cli *client.Cli
 	if err != nil {
 		os.RemoveAll(dir)
 		slog.Error(err.Error())
-		pkg.Status.Status = packages.Error
-		packages.UpdatePackage(pkg)
+		for _, pkg2 := range pkgs {
+			pkg2.LastBuildStatus = packages.Error
+			packages.UpdatePackage(pkg2, true)
+		}
 		return nil
 	}
 	for _, entry := range entries {
@@ -354,14 +370,19 @@ func buildPackage(ctx context.Context, pkg packages.PackageInfo, cli *client.Cli
 	if buildErr {
 		fmt.Println("No build output for " + pkg.Name)
 		os.RemoveAll(dir)
-		pkg.Status.Status = packages.Error
-		packages.UpdatePackage(pkg)
+		for _, pkg2 := range pkgs {
+			pkg2.LastBuildStatus = packages.Error
+			packages.UpdatePackage(pkg2, true)
+		}
 		return nil
 	} else {
 		fmt.Println("Build succeeded for " + pkg.Name)
-		pkg.Status.Status = packages.Built
-		pkg.Version = buildVersion
-		packages.UpdatePackage(pkg)
+		for _, pkg2 := range pkgs {
+			pkg2.Status = packages.Uptodate
+			pkg2.LastBuildStatus = packages.Built
+			pkg2.Version = buildVersion
+			packages.UpdatePackage(pkg2, true)
+		}
 		// Save to repo
 		cmd := exec.Command("/bin/sh", "-c", "aptly repo add -force-replace -remove-files pika-canary "+dir)
 		cmd.Stdout = os.Stdout

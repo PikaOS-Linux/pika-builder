@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/goccy/go-json"
-
 	"pault.ag/go/debian/version"
 
 	"github.com/klauspost/compress/gzip"
@@ -22,6 +20,7 @@ import (
 )
 
 var packagesSlice []PackageInfo = make([]PackageInfo, 0)
+var updatedPackagesSlice []PackageInfo = make([]PackageInfo, 0)
 var LastUpdateTime time.Time
 
 func GetPackagesSlice() []PackageInfo {
@@ -29,9 +28,13 @@ func GetPackagesSlice() []PackageInfo {
 }
 
 func ProcessPackages() error {
+	err := LoadFromDb()
+	if err != nil {
+		return err
+	}
 	var internalPackages = make(map[string]PackageInfo)
 	var externalPackages = make(map[string]PackageInfo)
-	err := LoadInternalPackages(internalPackages)
+	err = LoadInternalPackages(internalPackages)
 	if err != nil {
 		return err
 	}
@@ -41,11 +44,11 @@ func ProcessPackages() error {
 	}
 	ProcessStalePackages(internalPackages, externalPackages)
 	ProcessMissingPackages(internalPackages, externalPackages)
-	packagesSlice = make([]PackageInfo, 0)
+	newPackagesSlice := make([]PackageInfo, 0)
 	for _, v := range internalPackages {
-		packagesSlice = append(packagesSlice, v)
+		newPackagesSlice = append(newPackagesSlice, v)
 	}
-	slices.SortStableFunc(packagesSlice, func(a, b PackageInfo) int {
+	slices.SortStableFunc(newPackagesSlice, func(a, b PackageInfo) int {
 		if a.Name == b.Name {
 			return 0
 		}
@@ -54,31 +57,107 @@ func ProcessPackages() error {
 		}
 		return -1
 	})
+
+	for _, pkg2 := range newPackagesSlice {
+		found := false
+		for _, pkg := range packagesSlice {
+			if pkg2.Name == pkg.Name {
+				found = true
+				if (pkg2.Status == Stale || pkg2.Status == Missing) && (pkg.Status == Uptodate || pkg.Status == Built || pkg.Status == Error) {
+					pkg.PendingVersion = pkg2.PendingVersion
+					pkg.Status = pkg2.Status
+					updatedPackagesSlice = append(updatedPackagesSlice, pkg)
+				}
+			}
+		}
+		if !found {
+			updatedPackagesSlice = append(updatedPackagesSlice, pkg2)
+		}
+	}
 	LastUpdateTime = time.Now()
 	err = SaveToDb()
-	if err != nil {
-		return err
-	}
-	err = LoadFromDb()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-type packs struct {
-	ID   string        `json:"id"`
-	Pkgs []PackageInfo `json:"pkgs"`
+type PackageBuildQueue map[string][]PackageInfo
+
+func GetBuildQueue() PackageBuildQueue {
+	buildQueue := make(map[string][]PackageInfo)
+	for _, pkg := range packagesSlice {
+		if !(pkg.Status == Missing || pkg.Status == Stale) || pkg.LastBuildStatus == Error {
+			continue
+		}
+
+		existing, ok := buildQueue[pkg.Source]
+		if !ok {
+			existing = make([]PackageInfo, 0)
+		}
+		existing = append(existing, pkg)
+		buildQueue[pkg.Source] = existing
+	}
+	return buildQueue
 }
 
-func UpdatePackage(pkg PackageInfo) {
+func UpdatePackage(pkg PackageInfo, updateDB bool) error {
 	for i, v := range packagesSlice {
 		if pkg.Name == v.Name {
 			packagesSlice[i] = pkg
+			if updateDB {
+				err := saveSingleToDb(pkg)
+				if err != nil {
+					return err
+				}
+			}
 			LastUpdateTime = time.Now()
 			break
 		}
 	}
+	if updateDB {
+		err := saveSingleToDb(pkg)
+		if err != nil {
+			return err
+		}
+	}
+	LastUpdateTime = time.Now()
+	return nil
+}
+
+func IsBuilt(pkg PackageInfo) bool {
+	for _, v := range packagesSlice {
+		if pkg.Name == v.Name {
+			if v.Status == Built {
+				return true
+			}
+			break
+		}
+	}
+	return false
+}
+
+func saveSingleToDb(pkg PackageInfo) error {
+	database, err := db.New()
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	_, err = surrealdb.SmartMarshal(database.Update, pkg)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	timecont := TimeContainer{
+		ID:   "lastupdatetime:`lastupdatetime`",
+		Time: time.Now().Format("2006-01-02T15:04:05.999Z"),
+	}
+	_, err = surrealdb.SmartMarshal(database.Update, timecont)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return nil
 }
 
 func SaveToDb() error {
@@ -88,28 +167,18 @@ func SaveToDb() error {
 	}
 	defer database.Close()
 
-	for i, v := range packagesSlice {
-		id := "packages:`" + v.Name + "`"
+	for i, v := range updatedPackagesSlice {
+		id := "packagestore:`" + v.Name + "`"
 		v.ID = id
-		packagesSlice[i] = v
+		updatedPackagesSlice[i] = v
 	}
 
-	packsMarshaled, err := json.Marshal(packagesSlice)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-
-	_, err = database.Query("REMOVE TABLE packages", nil)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-
-	_, err = database.Query("INSERT INTO packages "+string(packsMarshaled), nil)
-	if err != nil {
-		fmt.Println(err)
-		return err
+	for _, pkg := range updatedPackagesSlice {
+		_, err := surrealdb.SmartMarshal(database.Update, pkg)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
 	}
 
 	timecont := TimeContainer{
@@ -131,7 +200,7 @@ func LoadFromDb() error {
 		return err
 	}
 	defer database.Close()
-	packages, err := surrealdb.SmartUnmarshal[[]PackageInfo](database.Select("packages"))
+	packages, err := surrealdb.SmartUnmarshal[[]PackageInfo](database.Select("packagestore"))
 	if err != nil {
 		return err
 	}
@@ -214,9 +283,7 @@ func ProcessMissingPackages(internalPackages map[string]PackageInfo, externalPac
 	for k, v := range externalPackages {
 		_, ok := internalPackages[k]
 		if !ok {
-			newStatus := Status{
-				Status: Missing,
-			}
+			newStatus := Missing
 			v.Status = newStatus
 			internalPackages[k] = v
 		}
@@ -226,7 +293,7 @@ func ProcessMissingPackages(internalPackages map[string]PackageInfo, externalPac
 func ProcessStalePackages(internalPackages map[string]PackageInfo, externalPackages map[string]PackageInfo) {
 	for k, v := range externalPackages {
 		matchedPackage, ok := internalPackages[k]
-		if !ok || matchedPackage.Status.Status == Missing {
+		if !ok || matchedPackage.Status == Missing {
 			continue
 		}
 
@@ -235,11 +302,8 @@ func ProcessStalePackages(internalPackages map[string]PackageInfo, externalPacka
 		extVer, _ := version.Parse(splitver[0])
 		cmpVal := version.Compare(matchedVer, extVer)
 		if cmpVal < 0 {
-			newStatus := Status{
-				Status:     Stale,
-				NewVersion: v.Version,
-			}
-			matchedPackage.Status = newStatus
+			matchedPackage.Status = Stale
+			matchedPackage.PendingVersion = extVer.String()
 			internalPackages[k] = matchedPackage
 		}
 	}
@@ -279,6 +343,10 @@ func fetchPackageFile(pkg config.PackageFile, selectedRepo string) (map[string]P
 			break
 		}
 
+		if stanza["Section"] == "debian-installer" {
+			continue
+		}
+
 		useWhitelist := pkg.UseWhitelist && len(pkg.Whitelist) > 0
 		if useWhitelist {
 			contained := nameContains(stanza["Package"], pkg.Whitelist)
@@ -302,9 +370,7 @@ func fetchPackageFile(pkg config.PackageFile, selectedRepo string) (map[string]P
 			Version:      ver.String(),
 			Architecture: stanza["Architecture"],
 			Description:  stanza["Description"],
-			Status: Status{
-				Status: Built,
-			},
+			Status:       Uptodate,
 		}
 	}
 
@@ -330,12 +396,14 @@ func GetPackagesCount() PackagesCount {
 		Building: 0,
 	}
 	for _, v := range packagesSlice {
-		switch v.Status.Status {
+		switch v.Status {
 		case Stale:
 			count.Stale++
 		case Missing:
 			count.Missing++
 		case Built:
+			count.Built++
+		case Uptodate:
 			count.Built++
 		case Error:
 			count.Error++
@@ -343,6 +411,9 @@ func GetPackagesCount() PackagesCount {
 			count.Queued++
 		case Building:
 			count.Building++
+		}
+		if v.LastBuildStatus == Error {
+			count.Error++
 		}
 	}
 	return count
@@ -363,12 +434,20 @@ type PackageInfo struct {
 	Name string `json:"name"`
 	// Version of the package
 	Version string `json:"version"`
+	// Source of the package
+	Source string `json:"source"`
 	// Architecture of the package
 	Architecture string `json:"architecture"`
 	// Description of the package
 	Description string `json:"description"`
 	// Status of the package
-	Status Status `json:"statusinfo"`
+	Status PackageStatus `json:"statusinfo"`
+	// Last built version
+	LastBuildVersion string `json:"lastbuiltversion"`
+	// Pending Version
+	PendingVersion string `json:"pendingversion"`
+	// Last Built Status
+	LastBuildStatus PackageStatus `json:"buildstatusinfo"`
 }
 
 type PackageStatus string
@@ -386,6 +465,8 @@ const (
 	Building PackageStatus = "Building"
 	// Package is being missing
 	Missing PackageStatus = "Missing"
+	// Package is upto date
+	Uptodate PackageStatus = "Uptodate"
 )
 
 type TimeContainer struct {
