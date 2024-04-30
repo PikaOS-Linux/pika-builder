@@ -23,6 +23,8 @@ var packagesSlice []PackageInfo = make([]PackageInfo, 0)
 var updatedPackagesSlice []PackageInfo = make([]PackageInfo, 0)
 var LastUpdateTime time.Time
 
+var dbInstance *surrealdb.DB
+
 func GetPackagesSlice() []PackageInfo {
 	return packagesSlice
 }
@@ -143,12 +145,14 @@ func IsBuilt(pkg PackageInfo) bool {
 }
 
 func saveSingleToDb(pkg PackageInfo) error {
-	database, err := db.New()
-	if err != nil {
-		return err
+	if dbInstance == nil {
+		var err error
+		dbInstance, err = db.New()
+		if err != nil {
+			return err
+		}
 	}
-	defer database.Close()
-	_, err = surrealdb.SmartMarshal(database.Update, pkg)
+	_, err := surrealdb.SmartMarshal(dbInstance.Update, pkg)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -157,7 +161,7 @@ func saveSingleToDb(pkg PackageInfo) error {
 		ID:   "lastupdatetime:`lastupdatetime`",
 		Time: time.Now().Format("2006-01-02T15:04:05.999Z"),
 	}
-	_, err = surrealdb.SmartMarshal(database.Update, timecont)
+	_, err = surrealdb.SmartMarshal(dbInstance.Update, timecont)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -166,11 +170,13 @@ func saveSingleToDb(pkg PackageInfo) error {
 }
 
 func SaveToDb() error {
-	database, err := db.New()
-	if err != nil {
-		return err
+	if dbInstance == nil {
+		var err error
+		dbInstance, err = db.New()
+		if err != nil {
+			return err
+		}
 	}
-	defer database.Close()
 
 	for i, v := range updatedPackagesSlice {
 		id := "packagestore:`" + v.Name + "`"
@@ -179,7 +185,7 @@ func SaveToDb() error {
 	}
 
 	for _, pkg := range updatedPackagesSlice {
-		_, err := surrealdb.SmartMarshal(database.Update, pkg)
+		_, err := surrealdb.SmartMarshal(dbInstance.Update, pkg)
 		if err != nil {
 			fmt.Println(err)
 			return err
@@ -190,7 +196,7 @@ func SaveToDb() error {
 		ID:   "lastupdatetime:`lastupdatetime`",
 		Time: time.Now().Format("2006-01-02T15:04:05.999Z"),
 	}
-	_, err = surrealdb.SmartMarshal(database.Update, timecont)
+	_, err := surrealdb.SmartMarshal(dbInstance.Update, timecont)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -200,12 +206,14 @@ func SaveToDb() error {
 }
 
 func LoadFromDb() error {
-	database, err := db.New()
-	if err != nil {
-		return err
+	if dbInstance == nil {
+		var err error
+		dbInstance, err = db.New()
+		if err != nil {
+			return err
+		}
 	}
-	defer database.Close()
-	packages, err := surrealdb.SmartUnmarshal[[]PackageInfo](database.Select("packagestore"))
+	packages, err := surrealdb.SmartUnmarshal[[]PackageInfo](dbInstance.Select("packagestore"))
 	if err != nil {
 		return err
 	}
@@ -219,7 +227,7 @@ func LoadFromDb() error {
 		}
 		return -1
 	})
-	timecont, err := surrealdb.SmartUnmarshal[TimeContainer](database.Select("lastupdatetime:`lastupdatetime`"))
+	timecont, err := surrealdb.SmartUnmarshal[TimeContainer](dbInstance.Select("lastupdatetime:`lastupdatetime`"))
 	if err != nil {
 		return err
 	}
