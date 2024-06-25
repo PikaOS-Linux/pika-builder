@@ -9,14 +9,14 @@ import (
 	"go.temporal.io/sdk/client"
 )
 
-func BuildPackagesNow(c client.Client) {
+func BuildPackagesNow(c client.Client, ctx context.Context) {
 	options := client.StartWorkflowOptions{
 		ID:        "startup-package-build-workflow",
 		TaskQueue: workflows.PACKAGE_BUILD_TASK_QUEUE,
 	}
 
 	// Start the Workflow
-	_, err := c.ExecuteWorkflow(context.Background(), options, workflows.BuildPackages)
+	_, err := c.ExecuteWorkflow(ctx, options, workflows.BuildPackages)
 	if err != nil {
 		fmt.Println("unable to complete startup package build Workflow", err)
 	} else {
@@ -24,10 +24,10 @@ func BuildPackagesNow(c client.Client) {
 	}
 }
 
-func ScheduleBuildPackages(c client.Client) {
+func ScheduleBuildPackages(c client.Client, ctx context.Context) {
 	scheduleID := "package-build-schedule"
 	workflowID := "scheduled-package-build-workflow"
-	_, err := c.ScheduleClient().Create(context.Background(), client.ScheduleOptions{
+	_, err := c.ScheduleClient().Create(ctx, client.ScheduleOptions{
 		ID: scheduleID,
 		Spec: client.ScheduleSpec{
 			Jitter: 1 * time.Minute,

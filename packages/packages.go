@@ -4,6 +4,7 @@ import (
 	"compress/bzip2"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"pkbldr/config"
 	"pkbldr/db"
@@ -210,12 +211,14 @@ func LoadFromDb() error {
 		var err error
 		dbInstance, err = db.New()
 		if err != nil {
-			return err
+			slog.Error(err.Error())
+			return nil
 		}
 	}
 	packages, err := surrealdb.SmartUnmarshal[[]PackageInfo](dbInstance.Select("packagestore"))
 	if err != nil {
-		return err
+		slog.Error(err.Error())
+		return nil
 	}
 	packagesSlice = packages
 	slices.SortStableFunc(packagesSlice, func(a, b PackageInfo) int {
@@ -229,11 +232,13 @@ func LoadFromDb() error {
 	})
 	timecont, err := surrealdb.SmartUnmarshal[TimeContainer](dbInstance.Select("lastupdatetime:`lastupdatetime`"))
 	if err != nil {
-		return err
+		slog.Error(err.Error())
+		return nil
 	}
 	LastUpdateTime, err = time.Parse("2006-01-02T15:04:05.999Z", timecont.Time)
 	if err != nil {
-		return err
+		slog.Error(err.Error())
+		return nil
 	}
 	return nil
 }

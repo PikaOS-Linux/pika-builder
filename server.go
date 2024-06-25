@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -23,7 +24,7 @@ import (
 )
 
 // runServer runs a new HTTP server with the loaded environment variables.
-func runServer() error {
+func runServer(ctx context.Context) error {
 	// Validate environment variables.
 	port, err := strconv.Atoi(gowebly.Getenv("BACKEND_PORT", "7555"))
 	if err != nil {
@@ -61,10 +62,10 @@ func runServer() error {
 
 	go startTemporalFetchWorker(c)
 	go startTemporalBuildWorker(c)
-	go starters.FetchPackagesNow(c)
-	go starters.ScheduleFetchPackages(c)
-	go starters.BuildPackagesNow(c)
-	go starters.ScheduleBuildPackages(c)
+	go starters.FetchPackagesNow(c, ctx)
+	go starters.ScheduleFetchPackages(c, ctx)
+	go starters.BuildPackagesNow(c, ctx)
+	go starters.ScheduleBuildPackages(c, ctx)
 
 	// Create a new server instance with options from environment variables.
 	// For more information, see https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/

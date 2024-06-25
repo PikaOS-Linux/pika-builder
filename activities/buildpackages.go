@@ -174,7 +174,7 @@ func StartBuildLoop(ctx context.Context) error {
 
 func createContainers(ctx context.Context, cli *client.Client, containerName string, hostDir string, containerDir string, imageName string) ([]string, error) {
 	containers := make([]string, 0)
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 3; i++ {
 		resp, err := cli.ContainerCreate(ctx, &container.Config{
 			Image:      imageName,
 			WorkingDir: containerDir,
@@ -199,16 +199,16 @@ func createContainers(ctx context.Context, cli *client.Client, containerName str
 }
 
 func forceKillContainers(ctx context.Context, cli *client.Client, containerName string) {
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 3; i++ {
 		cli.ContainerRemove(ctx, containerName+"-"+strconv.Itoa(i), types.ContainerRemoveOptions{Force: true})
 	}
 }
 
 func buildBatch(packs packages.PackageBuildQueue, cli *client.Client, containers []string, hostDir string) error {
-	packageQueue := make(chan []packages.PackageInfo, 4)
-	// Create a worker pool with 4
+	packageQueue := make(chan []packages.PackageInfo, 3)
+	// Create a worker pool with 3
 	var wg sync.WaitGroup
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 3; i++ {
 		cont := containers[i]
 		wg.Add(1)
 		go func() {
@@ -266,7 +266,7 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	}
 	pkg.LastBuildVersion = buildVersion
 
-	command := "cd " + pkgdir + " && apt-get source " + pkg.Name + "=" + buildVersion + " -y"
+	command := "cd " + pkgdir + " && eatmydata apt-get source " + pkg.Name + "=" + buildVersion + " -y"
 	// Execute the command
 	execResp, err := cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
 		AttachStdout: true,
