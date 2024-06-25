@@ -12,8 +12,25 @@ templ MetaTags(keywords, description string) {
 const pageSize = 250
 
 // BodyContent defines HTML content.
-templ BodyContent(packages []packages.PackageInfo, page int, nextPage string, prevPage string) {
+templ BodyContent(filteredPackages []packages.PackageInfo, page int, nextPage string, prevPage string, statusFilter string, nameFilter string) {
 	<div class="overflow-x-auto mb-12 relative">
+	        <div class="flex justify-between items-center mb-4">
+            <div>
+                <!-- Status Filters -->
+                <button class="btn" hx-get="?status=all">All</button>
+                <button class="btn" hx-get="?status=built">Built</button>
+                <button class="btn" hx-get="?status=stale">Stale</button>
+                <button class="btn" hx-get="?status=queued">Queued</button>
+                <button class="btn" hx-get="?status=building">Building</button>
+                <button class="btn" hx-get="?status=missing">Missing</button>
+                <button class="btn" hx-get="?status=error">Error</button>
+            </div>
+            <div>
+                <!-- Search Box -->
+                <input type="text" class="input input-bordered" placeholder="Search by Name" id="search-box"
+                    hx-get="?name=" hx-trigger="input from:#search-box" hx-target="#app" hx-swap="outerHTML" value={ nameFilter } />
+            </div>
+        </div>
 		<table class="table m-0">
 			<!-- head -->
 			<thead class="sticky w-full top-0 bg-base-100">
@@ -31,7 +48,7 @@ templ BodyContent(packages []packages.PackageInfo, page int, nextPage string, pr
 				</tr>
 			</thead>
 			<tbody>
-				for count, pkg := range packages {
+				for count, pkg := range filteredPackages {
 					if !(count < (page - 1) * pageSize || count >= page * pageSize) {
 						<tr class="flex w-full justify-center items-center">
 							<th class="w-1/12">{ strconv.Itoa(count + 1) }</th>
@@ -42,7 +59,7 @@ templ BodyContent(packages []packages.PackageInfo, page int, nextPage string, pr
 							<td class="w-3/12 break-words">{ pkg.Description }</td>
 							<td class="w-1/12 break-words">{ pkg.Architecture }</td>
 							<td class="w-1/12">{ string(pkg.Status) }</td>
-							<td class="w-1/12">{ string(pkg.LastBuildStatus) }</td>
+							<td class="w-1/12"><a href={ templ.SafeURL("https://buildlogs.pika-os.com/" + pkg.Name + "_buildlog.log") }>{ string(pkg.LastBuildStatus) }</a></td>
 						</tr>
 					}
 				}
@@ -63,7 +80,7 @@ templ BodyContent(packages []packages.PackageInfo, page int, nextPage string, pr
 				>«</button>
 			}
 			<button class="join-item btn">Page { strconv.Itoa(page) }</button>
-			if page < (len(packages) / pageSize) + 1 {
+			if page < (len(filteredPackages) / pageSize) + 1 {
 				<button
 					class="join-item btn"
 					hx-get={ nextPage }

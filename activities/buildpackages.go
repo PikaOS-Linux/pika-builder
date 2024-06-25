@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"pkbldr/config"
 	"pkbldr/packages"
 	"strconv"
 	"strings"
@@ -349,15 +350,47 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 		return nil
 	}
 	for _, entry := range entries {
-		if strings.Contains(entry.Name(), "dbgsym") {
+		if strings.Contains(entry.Name(), "dbgsym") || strings.Contains(entry.Name(), "source") {
 			os.Remove(dir + "/" + entry.Name())
 			continue
 		}
-		if strings.Contains(entry.Name(), "_source") {
-			os.Remove(dir + "/" + entry.Name())
-			continue
+		if strings.Contains(entry.Name(), ".log") {
+			cmd := exec.Command("/bin/sh", "-c", "mv "+dir+"/"+entry.Name()+" /srv/www/buildlogs/"+pkg.Name+"_"+entry.Name())
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Stdin = os.Stdin
+			err = cmd.Run()
+			if err != nil {
+				slog.Error(err.Error())
+			}
+			cmd = exec.Command("/bin/sh", "-c", "chmod 777 "+"/srv/www/buildlogs/"+pkg.Name+"_"+entry.Name())
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Stdin = os.Stdin
+			err = cmd.Run()
+			if err != nil {
+				slog.Error(err.Error())
+			}
 		}
 		if filepath.Ext(entry.Name()) == ".deb" {
+			cmd := exec.Command("/bin/sh", "-c", "mv "+dir+"/"+entry.Name()+" "+config.Configs.DeboutputDir+entry.Name())
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Stdin = os.Stdin
+			err = cmd.Run()
+			if err != nil {
+				slog.Error(err.Error())
+				continue
+			}
+			cmd = exec.Command("/bin/sh", "-c", "chmod 777 "+config.Configs.DeboutputDir+entry.Name())
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Stdin = os.Stdin
+			err = cmd.Run()
+			if err != nil {
+				slog.Error(err.Error())
+				continue
+			}
 			buildErr = false
 			continue
 		}
@@ -377,24 +410,6 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 			pkg2.LastBuildStatus = packages.Built
 			pkg2.Version = buildVersion
 			packages.UpdatePackage(pkg2, true)
-		}
-		// Save to repo
-		cmd := exec.Command("/bin/sh", "-c", "aptly repo add -force-replace -remove-files pika-canary "+dir)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
-		err := cmd.Run()
-		if err != nil {
-			return err
-		}
-		// publish updated repo
-		cmd = exec.Command("/bin/sh", "-c", "aptly publish update -batch -skip-contents -force-overwrite pika filesystem:pikarepo:")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
-		err = cmd.Run()
-		if err != nil {
-			return err
 		}
 	}
 	os.RemoveAll(dir)

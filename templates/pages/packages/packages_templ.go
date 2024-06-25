@@ -67,7 +67,7 @@ func MetaTags(keywords, description string) templ.Component {
 const pageSize = 250
 
 // BodyContent defines HTML content.
-func BodyContent(packages []packages.PackageInfo, page int, nextPage string, prevPage string) templ.Component {
+func BodyContent(filteredPackages []packages.PackageInfo, page int, nextPage string, prevPage string, statusFilter string, nameFilter string) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, templ_7745c5c3_W io.Writer) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templ_7745c5c3_W.(*bytes.Buffer)
 		if !templ_7745c5c3_IsBuffer {
@@ -80,22 +80,35 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<div class=\"overflow-x-auto mb-12 relative\"><table class=\"table m-0\"><!-- head --><thead class=\"sticky w-full top-0 bg-base-100\"><tr class=\"flex w-full justify-center items-center\"><th class=\"w-1/12\"></th><th class=\"w-2/12\">Name</th><th class=\"w-1/12\">Current Version</th><th class=\"w-1/12\">New Version</th><th class=\"w-1/12\">Last Build Version</th><th class=\"w-3/12\">Description</th><th class=\"w-1/12\">Architecture</th><th class=\"w-1/12\">Current Status</th><th class=\"w-1/12\">Last Build Status</th></tr></thead> <tbody>")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<div class=\"overflow-x-auto mb-12 relative\"><div class=\"flex justify-between items-center mb-4\"><div><!-- Status Filters --><button class=\"btn\" hx-get=\"?status=all\">All</button> <button class=\"btn\" hx-get=\"?status=built\">Built</button> <button class=\"btn\" hx-get=\"?status=stale\">Stale</button> <button class=\"btn\" hx-get=\"?status=queued\">Queued</button> <button class=\"btn\" hx-get=\"?status=building\">Building</button> <button class=\"btn\" hx-get=\"?status=missing\">Missing</button> <button class=\"btn\" hx-get=\"?status=error\">Error</button></div><div><!-- Search Box --><input type=\"text\" class=\"input input-bordered\" placeholder=\"Search by Name\" id=\"search-box\" hx-get=\"?name=\" hx-trigger=\"input from:#search-box\" hx-target=\"#app\" hx-swap=\"outerHTML\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		for count, pkg := range packages {
+		var templ_7745c5c3_Var5 string
+		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(nameFilter)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 31, Col: 127}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("\"></div></div><table class=\"table m-0\"><!-- head --><thead class=\"sticky w-full top-0 bg-base-100\"><tr class=\"flex w-full justify-center items-center\"><th class=\"w-1/12\"></th><th class=\"w-2/12\">Name</th><th class=\"w-1/12\">Current Version</th><th class=\"w-1/12\">New Version</th><th class=\"w-1/12\">Last Build Version</th><th class=\"w-3/12\">Description</th><th class=\"w-1/12\">Architecture</th><th class=\"w-1/12\">Current Status</th><th class=\"w-1/12\">Last Build Status</th></tr></thead> <tbody>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		for count, pkg := range filteredPackages {
 			if !(count < (page-1)*pageSize || count >= page*pageSize) {
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<tr class=\"flex w-full justify-center items-center\"><th class=\"w-1/12\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var5 string
-				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(count + 1))
+				var templ_7745c5c3_Var6 string
+				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(count + 1))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 37, Col: 51}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 54, Col: 51}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -103,12 +116,12 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var6 string
-				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.Name)
+				var templ_7745c5c3_Var7 string
+				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 38, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 55, Col: 48}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -116,12 +129,12 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var7 string
-				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.Version)
+				var templ_7745c5c3_Var8 string
+				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.Version)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 39, Col: 51}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 56, Col: 51}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -129,12 +142,12 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var8 string
-				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.PendingVersion)
+				var templ_7745c5c3_Var9 string
+				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.PendingVersion)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 40, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 57, Col: 46}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -142,12 +155,12 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var9 string
-				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.LastBuildVersion)
+				var templ_7745c5c3_Var10 string
+				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.LastBuildVersion)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 41, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 58, Col: 48}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -155,12 +168,12 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var10 string
-				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.Description)
+				var templ_7745c5c3_Var11 string
+				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.Description)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 42, Col: 55}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 59, Col: 55}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -168,23 +181,10 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var11 string
-				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.Architecture)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 43, Col: 56}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</td><td class=\"w-1/12\">")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
 				var templ_7745c5c3_Var12 string
-				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(string(pkg.Status))
+				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(pkg.Architecture)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 44, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 60, Col: 56}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -195,15 +195,37 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var13 string
-				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(string(pkg.LastBuildStatus))
+				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(string(pkg.Status))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 45, Col: 55}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 61, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</td></tr>")
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</td><td class=\"w-1/12\"><a href=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var14 templ.SafeURL = templ.SafeURL("https://buildlogs.pika-os.com/" + pkg.Name + "_buildlog.log")
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(string(templ_7745c5c3_Var14)))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var15 string
+				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(string(pkg.LastBuildStatus))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 62, Col: 144}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("</a></td></tr>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -218,12 +240,12 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var14 string
-			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(prevPage)
+			var templ_7745c5c3_Var16 string
+			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(prevPage)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 55, Col: 22}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 72, Col: 22}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -241,12 +263,12 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var15 string
-		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(page))
+		var templ_7745c5c3_Var17 string
+		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(page))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 65, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 82, Col: 58}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -254,17 +276,17 @@ func BodyContent(packages []packages.PackageInfo, page int, nextPage string, pre
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if page < (len(packages)/pageSize)+1 {
+		if page < (len(filteredPackages)/pageSize)+1 {
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString("<button class=\"join-item btn\" hx-get=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var16 string
-			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(nextPage)
+			var templ_7745c5c3_Var18 string
+			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(nextPage)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 69, Col: 22}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/pages/packages/packages.templ`, Line: 86, Col: 22}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

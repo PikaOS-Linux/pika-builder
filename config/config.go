@@ -37,6 +37,7 @@ type Config struct {
 	TemporalUrl          string        `json:"temporalUrl"`
 	LocalPackageFiles    []PackageFile `json:"localPackageFiles"`
 	ExternalPackageFiles []PackageFile `json:"externalPackageFiles"`
+	DeboutputDir         string        `json:"deboutputDir"`
 	Salt                 string        `json:"salt"`
 }
 
