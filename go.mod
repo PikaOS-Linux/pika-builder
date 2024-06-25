@@ -5,13 +5,13 @@ go 1.22.1
 require (
 	github.com/a-h/templ v0.2.543
 	github.com/docker/docker v24.0.9+incompatible
-	github.com/goccy/go-json v0.10.2
 	github.com/gofiber/fiber/v2 v2.52.0
 	github.com/gofiber/template/html/v2 v2.1.0
 	github.com/gowebly/helpers v0.3.0
 	github.com/surrealdb/surrealdb.go v0.2.1
 	github.com/ulikunitz/xz v0.5.11
 	go.temporal.io/sdk v1.26.0
+	golang.org/x/exp v0.0.0-20231127185646-65229373498e
 	pault.ag/go/debian v0.16.0
 )
 
@@ -40,7 +40,6 @@ require (
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
 	go.temporal.io/api v1.29.1 // indirect
-	golang.org/x/exp v0.0.0-20231127185646-65229373498e // indirect
 	golang.org/x/net v0.22.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect

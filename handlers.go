@@ -69,7 +69,7 @@ func packagesPageHandler(c *fiber.Ctx) error {
 	// Apply filters
 	var filteredPackages []packages.PackageInfo
 	for _, pkg := range allPackages {
-		if (statusFilter == "all" || statusFilter == "" || string(pkg.Status) == statusFilter) &&
+		if (statusFilter == "all" || statusFilter == "" || strings.ToLower(string(pkg.LastBuildStatus)) == statusFilter || strings.ToLower(string(pkg.Status)) == statusFilter) &&
 			(nameFilter == "" || strings.Contains(pkg.Name, nameFilter)) {
 			filteredPackages = append(filteredPackages, pkg)
 		}
@@ -96,7 +96,7 @@ func packagesPageHandler(c *fiber.Ctx) error {
 	templateHandler := templ.Handler(
 		templates.Layout(
 			"PikaOS Package Builder - Packages", // define title text
-			metaTags, bodyContent, true,
+			metaTags, bodyContent, false,
 		),
 	)
 

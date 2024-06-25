@@ -14,23 +14,35 @@ const pageSize = 250
 // BodyContent defines HTML content.
 templ BodyContent(filteredPackages []packages.PackageInfo, page int, nextPage string, prevPage string, statusFilter string, nameFilter string) {
 	<div class="overflow-x-auto mb-12 relative">
-	        <div class="flex justify-between items-center mb-4">
-            <div>
-                <!-- Status Filters -->
-                <button class="btn" hx-get="?status=all">All</button>
-                <button class="btn" hx-get="?status=built">Built</button>
-                <button class="btn" hx-get="?status=stale">Stale</button>
-                <button class="btn" hx-get="?status=queued">Queued</button>
-                <button class="btn" hx-get="?status=building">Building</button>
-                <button class="btn" hx-get="?status=missing">Missing</button>
-                <button class="btn" hx-get="?status=error">Error</button>
-            </div>
-            <div>
-                <!-- Search Box -->
-                <input type="text" class="input input-bordered" placeholder="Search by Name" id="search-box"
-                    hx-get="?name=" hx-trigger="input from:#search-box" hx-target="#app" hx-swap="outerHTML" value={ nameFilter } />
-            </div>
-        </div>
+		<div class="flex justify-between items-center mb-4">
+			<div>
+				<!-- Status Filters -->
+				<button class="btn" hx-trigger="click" hx-target="#app" hx-swap="outerHTML" hx-get="?status=all">All</button>
+				<button class="btn" hx-trigger="click" hx-target="#app" hx-swap="outerHTML" hx-get="?status=built">Built</button>
+				<button class="btn" hx-trigger="click" hx-target="#app" hx-swap="outerHTML" hx-get="?status=stale">Stale</button>
+				<button class="btn" hx-trigger="click" hx-target="#app" hx-swap="outerHTML" hx-get="?status=queued">Queued</button>
+				<button class="btn" hx-trigger="click" hx-target="#app" hx-swap="outerHTML" hx-get="?status=building">Building</button>
+				<button class="btn" hx-trigger="click" hx-target="#app" hx-swap="outerHTML" hx-get="?status=missing">Missing</button>
+				<button class="btn" hx-trigger="click" hx-target="#app" hx-swap="outerHTML" hx-get="?status=error">Error</button>
+			</div>
+			<div>
+				<!-- Search Box -->
+				<form>
+					<input
+						type="text"
+						name="name"
+						class="input input-bordered"
+						placeholder="Search by Name"
+						id="search-box"
+						hx-get={ "?" }
+						hx-trigger="keyup changed delay:250ms"
+						hx-target="#app"
+						hx-swap="outerHTML"
+						value={ nameFilter }
+					/>
+				</form>
+			</div>
+		</div>
 		<table class="table m-0">
 			<!-- head -->
 			<thead class="sticky w-full top-0 bg-base-100">
@@ -44,7 +56,6 @@ templ BodyContent(filteredPackages []packages.PackageInfo, page int, nextPage st
 					<th class="w-1/12">Architecture</th>
 					<th class="w-1/12">Current Status</th>
 					<th class="w-1/12">Last Build Status</th>
-
 				</tr>
 			</thead>
 			<tbody>
