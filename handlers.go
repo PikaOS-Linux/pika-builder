@@ -86,12 +86,12 @@ func packagesPageHandler(c *fiber.Ctx) error {
 		end = totalPackages
 	}
 	paginatedPackages := filteredPackages[start:end]
-
+	hasNext := pageInt < (len(filteredPackages)/pageSize)+1
 	nextPage := "/packages?page=" + strconv.Itoa(pageInt+1) + "&status=" + statusFilter + "&name=" + nameFilter
 	prevPage := "/packages?page=" + strconv.Itoa(pageInt-1) + "&status=" + statusFilter + "&name=" + nameFilter
 
 	bodyContent := pages_packages.BodyContent(
-		paginatedPackages, pageInt, nextPage, prevPage, statusFilter, nameFilter)
+		paginatedPackages, pageInt, hasNext, nextPage, prevPage, statusFilter, nameFilter)
 
 	templateHandler := templ.Handler(
 		templates.Layout(

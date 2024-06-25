@@ -12,7 +12,7 @@ templ MetaTags(keywords, description string) {
 const pageSize = 250
 
 // BodyContent defines HTML content.
-templ BodyContent(filteredPackages []packages.PackageInfo, page int, nextPage string, prevPage string, statusFilter string, nameFilter string) {
+templ BodyContent(filteredPackages []packages.PackageInfo, page int, hasNext bool, nextPage string, prevPage string, statusFilter string, nameFilter string) {
 	<div class="overflow-x-auto mb-12 relative">
 		<div class="flex justify-between items-center mb-4">
 			<div>
@@ -60,19 +60,17 @@ templ BodyContent(filteredPackages []packages.PackageInfo, page int, nextPage st
 			</thead>
 			<tbody>
 				for count, pkg := range filteredPackages {
-					if !(count < (page - 1) * pageSize || count >= page * pageSize) {
-						<tr class="flex w-full justify-center items-center">
-							<th class="w-1/12">{ strconv.Itoa(count + 1) }</th>
-							<td class="w-2/12 break-words">{ pkg.Name }</td>
-							<td class="w-1/12 break-words">{ pkg.Version }</td>
-							<th class="w-1/12">{ pkg.PendingVersion }</th>
-							<th class="w-1/12">{ pkg.LastBuildVersion }</th>
-							<td class="w-3/12 break-words">{ pkg.Description }</td>
-							<td class="w-1/12 break-words">{ pkg.Architecture }</td>
-							<td class="w-1/12">{ string(pkg.Status) }</td>
-							<td class="w-1/12"><a href={ templ.SafeURL("https://buildlogs.pika-os.com/" + pkg.Name + "_buildlog.log") }>{ string(pkg.LastBuildStatus) }</a></td>
-						</tr>
-					}
+					<tr class="flex w-full justify-center items-center">
+						<th class="w-1/12">{ strconv.Itoa(count + 1) }</th>
+						<td class="w-2/12 break-words">{ pkg.Name }</td>
+						<td class="w-1/12 break-words">{ pkg.Version }</td>
+						<th class="w-1/12">{ pkg.PendingVersion }</th>
+						<th class="w-1/12">{ pkg.LastBuildVersion }</th>
+						<td class="w-3/12 break-words">{ pkg.Description }</td>
+						<td class="w-1/12 break-words">{ pkg.Architecture }</td>
+						<td class="w-1/12">{ string(pkg.Status) }</td>
+						<td class="w-1/12"><a href={ templ.SafeURL("https://buildlogs.pika-os.com/" + pkg.Name + "_buildlog.log") }>{ string(pkg.LastBuildStatus) }</a></td>
+					</tr>
 				}
 			</tbody>
 		</table>
@@ -91,7 +89,7 @@ templ BodyContent(filteredPackages []packages.PackageInfo, page int, nextPage st
 				>«</button>
 			}
 			<button class="join-item btn">Page { strconv.Itoa(page) }</button>
-			if page < (len(filteredPackages) / pageSize) + 1 {
+			if hasNext {
 				<button
 					class="join-item btn"
 					hx-get={ nextPage }
