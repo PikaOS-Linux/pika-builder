@@ -463,6 +463,8 @@ type PackageInfo struct {
 	Status PackageStatus `json:"statusinfo"`
 	// Last built version
 	LastBuildVersion string `json:"lastbuiltversion"`
+	// Number of build attempts since last successful build
+	BuildAttempts int `json:"buildattempts"`
 	// Pending Version
 	PendingVersion string `json:"pendingversion"`
 	// Last Built Status

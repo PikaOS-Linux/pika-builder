@@ -28,27 +28,27 @@ func runServer(ctx context.Context) error {
 	// Validate environment variables.
 	port, err := strconv.Atoi(gowebly.Getenv("BACKEND_PORT", "7555"))
 	if err != nil {
-		slog.Error(fmt.Sprintf("invalid backend port: %d", port), err)
+		slog.Error(fmt.Sprintf("invalid backend port: %d %s", port, err.Error()))
 		return err
 	}
 
 	// Load configuration.
 	err = config.Init()
 	if err != nil {
-		slog.Error("unable to load configuration", err)
+		slog.Error("unable to load configuration: " + err.Error())
 		return err
 	}
 
 	// Init session cache.
 	err = auth.Init()
 	if err != nil {
-		slog.Error("unable to init session cache", err)
+		slog.Error("unable to init session cache: " + err.Error())
 		return err
 	}
 
 	err = packages.LoadFromDb()
 	if err != nil {
-		slog.Error("unable to load packages from db", err)
+		slog.Error("unable to load packages from db: " + err.Error())
 		return err
 	}
 
@@ -56,7 +56,7 @@ func runServer(ctx context.Context) error {
 		HostPort: config.Configs.TemporalUrl,
 	})
 	if err != nil {
-		fmt.Println("unable to create Temporal client", err)
+		fmt.Println("unable to create Temporal client: " + err.Error())
 	}
 	defer c.Close()
 
@@ -102,7 +102,7 @@ func startTemporalFetchWorker(c client.Client) {
 	// Start listening to the Task Queue
 	err := w.Run(worker.InterruptCh())
 	if err != nil {
-		slog.Error("unable to start temporal fetch Worker", err)
+		slog.Error("unable to start temporal fetch Worker: " + err.Error())
 	}
 }
 
@@ -117,6 +117,6 @@ func startTemporalBuildWorker(c client.Client) {
 	// Start listening to the Task Queue
 	err := w.Run(worker.InterruptCh())
 	if err != nil {
-		slog.Error("unable to start temporal build Worker", err)
+		slog.Error("unable to start temporal build Worker: " + err.Error())
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"pkbldr/config"
 	"pkbldr/packages"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -247,8 +248,13 @@ func buildBatch(packs packages.PackageBuildQueue, cli *client.Client, containers
 
 func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.Client, respid string, hostDir string) error {
 	pkg := pkgs[0]
+	buildVersion := pkg.PendingVersion
+	if buildVersion == "" {
+		buildVersion = pkg.Version
+	}
 	for _, pkg2 := range pkgs {
 		pkg2.Status = packages.Building
+		pkg2.LastBuildVersion = buildVersion
 		packages.UpdatePackage(pkg2, false)
 	}
 
@@ -261,12 +267,6 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	pkgdirs := strings.Split(dir, "/")
 	pkgdir := pkgdirs[len(pkgdirs)-1]
 
-	buildVersion := pkg.PendingVersion
-	if buildVersion == "" {
-		buildVersion = pkg.Version
-	}
-	pkg.LastBuildVersion = buildVersion
-
 	command := "cd " + pkgdir + " && eatmydata apt-get source " + pkg.Name + "=" + buildVersion + " -y"
 	// Execute the command
 	execResp, err := cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
@@ -277,32 +277,29 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 		Privileged:   true,
 	})
 	if err != nil {
-		os.RemoveAll(dir)
-		slog.Error(err.Error())
-		for _, pkg2 := range pkgs {
-			pkg2.LastBuildStatus = packages.Error
-			packages.UpdatePackage(pkg2, true)
-		}
+		buildError(pkgs, err, dir)
 		return nil
 	}
 
 	// Attach to the command's output
 	output, err := cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
 	if err != nil {
-		os.RemoveAll(dir)
-		slog.Error(err.Error())
-		for _, pkg2 := range pkgs {
-			pkg2.LastBuildStatus = packages.Error
-			packages.UpdatePackage(pkg2, true)
-		}
+		buildError(pkgs, err, dir)
 		return nil
 	}
 
 	io.Copy(io.Discard, output.Reader)
 	output.Close()
 
+	buildcmd := "pika-pbuilder-amd64-v3-lto-build"
+	if config.Configs.LTOBlocklist != nil && slices.Contains(config.Configs.LTOBlocklist, pkg.Name) {
+		buildcmd = "pika-pbuilder-amd64-v3-build"
+	} else if pkg.BuildAttempts > 0 || pkg.LastBuildStatus == packages.Error {
+		buildcmd = "pika-pbuilder-amd64-v3-build"
+	}
+
 	// Command to execute inside the container
-	command = "cd " + pkgdir + " && pika-pbuilder-amd64-v3-lto-build *.dsc"
+	command = "cd " + pkgdir + " && " + buildcmd + " *.dsc"
 
 	// Execute the command
 	execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
@@ -313,24 +310,14 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 		Privileged:   true,
 	})
 	if err != nil {
-		os.RemoveAll(dir)
-		slog.Error(err.Error())
-		for _, pkg2 := range pkgs {
-			pkg2.LastBuildStatus = packages.Error
-			packages.UpdatePackage(pkg2, true)
-		}
+		buildError(pkgs, err, dir)
 		return nil
 	}
 
 	// start the command
 	output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
 	if err != nil {
-		os.RemoveAll(dir)
-		slog.Error(err.Error())
-		for _, pkg2 := range pkgs {
-			pkg2.LastBuildStatus = packages.Error
-			packages.UpdatePackage(pkg2, true)
-		}
+		buildError(pkgs, err, dir)
 		return nil
 	}
 
@@ -341,12 +328,7 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	buildErr := true
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		os.RemoveAll(dir)
-		slog.Error(err.Error())
-		for _, pkg2 := range pkgs {
-			pkg2.LastBuildStatus = packages.Error
-			packages.UpdatePackage(pkg2, true)
-		}
+		buildError(pkgs, err, dir)
 		return nil
 	}
 	for _, entry := range entries {
@@ -397,11 +379,7 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	}
 	if buildErr {
 		fmt.Println("No build output for " + pkg.Name)
-		os.RemoveAll(dir)
-		for _, pkg2 := range pkgs {
-			pkg2.LastBuildStatus = packages.Error
-			packages.UpdatePackage(pkg2, true)
-		}
+		buildError(pkgs, err, dir)
 		return nil
 	} else {
 		fmt.Println("Build succeeded for " + pkg.Name)
@@ -414,4 +392,14 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	}
 	os.RemoveAll(dir)
 	return nil
+}
+
+func buildError(pkgs []packages.PackageInfo, err error, dir string) {
+	os.RemoveAll(dir)
+	slog.Error(err.Error())
+	for _, pkg2 := range pkgs {
+		pkg2.LastBuildStatus = packages.Error
+		pkg2.BuildAttempts++
+		packages.UpdatePackage(pkg2, true)
+	}
 }
