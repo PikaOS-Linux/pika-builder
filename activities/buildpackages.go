@@ -336,7 +336,7 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 			os.Remove(dir + "/" + entry.Name())
 			continue
 		}
-		if strings.Contains(entry.Name(), ".log") {
+		if filepath.Ext(entry.Name()) == ".log" {
 			cmd := exec.Command("/bin/sh", "-c", "mv "+dir+"/"+entry.Name()+" /srv/www/buildlogs/"+pkg.Name+"_"+entry.Name())
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
