@@ -396,7 +396,9 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 
 func buildError(pkgs []packages.PackageInfo, err error, dir string) {
 	os.RemoveAll(dir)
-	slog.Error(err.Error())
+	if err != nil {
+		slog.Error(err.Error())
+	}
 	for _, pkg2 := range pkgs {
 		pkg2.LastBuildStatus = packages.Error
 		pkg2.BuildAttempts++
