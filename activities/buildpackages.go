@@ -342,6 +342,16 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 						return
 					}
 				}
+				fmt.Println("Build succeeded for " + pkg.Name)
+				for _, pkg2 := range pkgs {
+					pkg2.Status = packages.Uptodate
+					pkg2.LastBuildStatus = packages.Built
+					pkg2.Version = buildVersion
+					packages.UpdatePackage(pkg2, true)
+				}
+				os.RemoveAll(dir)
+				output.Close()
+				timer.Stop()
 				return
 			default:
 				time.Sleep(time.Second * 10)
