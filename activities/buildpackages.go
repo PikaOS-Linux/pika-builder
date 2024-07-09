@@ -314,22 +314,84 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 		return nil
 	}
 
+	timer := time.NewTicker(time.Minute * 10)
+	numChecks := 0
+
 	// start the command
 	output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
 	if err != nil {
 		buildError(pkgs, err, dir)
 		return nil
 	}
+	timeoutHit := false
+
+	go func() {
+		for {
+			select {
+			case <-timer.C:
+				success := checkBuild(pkgs, pkg, dir)
+				if !success {
+					numChecks++
+					if numChecks > 6 {
+						fmt.Println("Timeout reached for " + pkg.Name)
+						buildError(pkgs, err, dir)
+						timeoutHit = true
+						output.Close()
+						timer.Stop()
+						os.RemoveAll(dir)
+						return
+					}
+				}
+				return
+			default:
+				time.Sleep(time.Second * 10)
+			}
+		}
+	}()
 
 	io.Copy(io.Discard, output.Reader)
 	output.Close()
+	timer.Stop()
+	if timeoutHit {
+		return nil
+	}
 
+	if !checkBuild(pkgs, pkg, dir) {
+		fmt.Println("No build output for " + pkg.Name)
+		buildError(pkgs, err, dir)
+		return nil
+	} else {
+		fmt.Println("Build succeeded for " + pkg.Name)
+		for _, pkg2 := range pkgs {
+			pkg2.Status = packages.Uptodate
+			pkg2.LastBuildStatus = packages.Built
+			pkg2.Version = buildVersion
+			packages.UpdatePackage(pkg2, true)
+		}
+	}
+	os.RemoveAll(dir)
+	return nil
+}
+
+func buildError(pkgs []packages.PackageInfo, err error, dir string) {
+	os.RemoveAll(dir)
+	if err != nil {
+		slog.Error(err.Error())
+	}
+	for _, pkg2 := range pkgs {
+		pkg2.LastBuildStatus = packages.Error
+		pkg2.BuildAttempts++
+		packages.UpdatePackage(pkg2, true)
+	}
+}
+
+func checkBuild(pkgs []packages.PackageInfo, pkg packages.PackageInfo, dir string) bool {
 	// Check if there is a build
 	buildErr := true
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		buildError(pkgs, err, dir)
-		return nil
+		return true
 	}
 	for _, entry := range entries {
 		if strings.Contains(entry.Name(), "dbgsym") || strings.Contains(entry.Name(), "source") {
@@ -377,31 +439,5 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 			continue
 		}
 	}
-	if buildErr {
-		fmt.Println("No build output for " + pkg.Name)
-		buildError(pkgs, err, dir)
-		return nil
-	} else {
-		fmt.Println("Build succeeded for " + pkg.Name)
-		for _, pkg2 := range pkgs {
-			pkg2.Status = packages.Uptodate
-			pkg2.LastBuildStatus = packages.Built
-			pkg2.Version = buildVersion
-			packages.UpdatePackage(pkg2, true)
-		}
-	}
-	os.RemoveAll(dir)
-	return nil
-}
-
-func buildError(pkgs []packages.PackageInfo, err error, dir string) {
-	os.RemoveAll(dir)
-	if err != nil {
-		slog.Error(err.Error())
-	}
-	for _, pkg2 := range pkgs {
-		pkg2.LastBuildStatus = packages.Error
-		pkg2.BuildAttempts++
-		packages.UpdatePackage(pkg2, true)
-	}
+	return !buildErr
 }
