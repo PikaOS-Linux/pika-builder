@@ -62,7 +62,13 @@ func ProcessPackages() error {
 		for _, pkg := range packagesSlice {
 			if pkg2.Name == pkg.Name {
 				found = true
-				if (pkg2.Status == Stale || pkg2.Status == Missing) && (pkg.Status == Uptodate || pkg.Status == Built || pkg.Status == Error) {
+				if pkg.Status == Stale && pkg2.Status != Stale {
+					pkg.Status = pkg2.Status
+					pkg.Version = pkg2.Version
+					pkg.PendingVersion = ""
+					updatedPackagesSlice = append(updatedPackagesSlice, pkg)
+				}
+				if (pkg2.Status == Stale || pkg2.Status == Missing) && (pkg.Status == Uptodate || pkg.Status == Stale || pkg.Status == Built || pkg.Status == Error) {
 					pkg.PendingVersion = pkg2.PendingVersion
 					pkg.Status = pkg2.Status
 					updatedPackagesSlice = append(updatedPackagesSlice, pkg)
@@ -262,7 +268,17 @@ func LoadInternalPackages(internalPackages map[string]PackageInfo) error {
 				return err
 			}
 			for k, v := range packages {
-				internalPackages[k] = v
+				pk, ok := internalPackages[k]
+				if !ok {
+					internalPackages[k] = v
+					continue
+				}
+				matchedVer, _ := version.Parse(pk.Version)
+				extVer, _ := version.Parse(v.Version)
+				cmpVal := version.Compare(extVer, matchedVer)
+				if cmpVal >= 0 {
+					internalPackages[k] = v
+				}
 			}
 		}
 	}
@@ -381,6 +397,15 @@ func fetchPackageFile(pkg config.PackageFile, selectedRepo string) (map[string]P
 		ver, err := version.Parse(stanza["Version"])
 		if err != nil {
 			return nil, err
+		}
+
+		pk, ok := packages[stanza["Package"]]
+		if ok {
+			matchedVer, _ := version.Parse(pk.Version)
+			cmpVal := version.Compare(ver, matchedVer)
+			if cmpVal < 0 {
+				continue
+			}
 		}
 
 		packages[stanza["Package"]] = PackageInfo{

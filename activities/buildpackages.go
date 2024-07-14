@@ -291,79 +291,133 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	io.Copy(io.Discard, output.Reader)
 	output.Close()
 
+	runTimer := true
+
 	buildcmd := "pika-pbuilder-amd64-v3-lto-build"
 	if config.Configs.LTOBlocklist != nil && slices.Contains(config.Configs.LTOBlocklist, pkg.Name) {
 		buildcmd = "pika-pbuilder-amd64-v3-build"
-	} else if pkg.BuildAttempts > 2 && pkg.LastBuildStatus == packages.Built {
-		buildcmd = "find ./ -type f -name '*.dsc' bash -c 'dget -all ' {} \\;"
+	} else if pkg.BuildAttempts >= 2 && pkg.LastBuildStatus == packages.Error {
+		runTimer = false
 	} else if pkg.BuildAttempts > 0 && pkg.LastBuildStatus == packages.Error {
 		buildcmd = "pika-pbuilder-amd64-v3-build"
 	}
 
-	// Command to execute inside the container
-	command = "cd " + pkgdir + " && " + buildcmd + " *.dsc"
-
-	// Execute the command
-	execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
-		AttachStdout: true,
-		AttachStderr: true,
-		Cmd:          []string{"sh", "-c", command},
-		Tty:          true,
-		Privileged:   true,
-	})
-	if err != nil {
-		buildError(pkgs, err, dir)
-		return nil
-	}
-
-	timer := time.NewTicker(time.Minute * 10)
-	numChecks := 0
-
-	// start the command
-	output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
-	if err != nil {
-		buildError(pkgs, err, dir)
-		return nil
-	}
 	timeoutHit := false
-
-	go func() {
-		for {
-			select {
-			case <-timer.C:
-				success := checkBuild(pkgs, pkg, dir)
-				if !success {
-					numChecks++
-					if numChecks > 6 {
-						fmt.Println("Timeout reached for " + pkg.Name)
-						buildError(pkgs, err, dir)
-						timeoutHit = true
-						output.Close()
-						timer.Stop()
-						os.RemoveAll(dir)
-						return
+	var timer *time.Ticker
+	if runTimer {
+		timer = time.NewTicker(time.Minute * 10)
+		numChecks := 0
+		go func() {
+			for {
+				select {
+				case <-timer.C:
+					success := checkBuild(pkgs, pkg, dir)
+					if !success {
+						numChecks++
+						if numChecks > 6 {
+							fmt.Println("Timeout reached for " + pkg.Name)
+							buildError(pkgs, err, dir)
+							timeoutHit = true
+							output.Close()
+							timer.Stop()
+							os.RemoveAll(dir)
+							return
+						}
 					}
+					fmt.Println("Build succeeded for " + pkg.Name)
+					for _, pkg2 := range pkgs {
+						pkg2.Status = packages.Uptodate
+						pkg2.LastBuildStatus = packages.Built
+						pkg2.Version = buildVersion
+						packages.UpdatePackage(pkg2, true)
+					}
+					os.RemoveAll(dir)
+					output.Close()
+					timer.Stop()
+					return
+				default:
+					time.Sleep(time.Second * 10)
 				}
-				fmt.Println("Build succeeded for " + pkg.Name)
-				for _, pkg2 := range pkgs {
-					pkg2.Status = packages.Uptodate
-					pkg2.LastBuildStatus = packages.Built
-					pkg2.Version = buildVersion
-					packages.UpdatePackage(pkg2, true)
-				}
-				os.RemoveAll(dir)
-				output.Close()
-				timer.Stop()
-				return
-			default:
-				time.Sleep(time.Second * 10)
 			}
-		}
-	}()
+		}()
+	}
 
-	io.Copy(io.Discard, output.Reader)
-	output.Close()
-	timer.Stop()
+	if pkg.BuildAttempts >= 2 && pkg.LastBuildStatus == packages.Error {
+		fmt.Println("Falling back to upstream for: " + pkg.Name)
+		for _, pkg3 := range pkgs {
+			bversion := pkg3.PendingVersion
+			if bversion == "" {
+				bversion = pkg3.Version
+			}
+			command := "cd " + pkgdir + " && eatmydata apt-get download " + pkg3.Name + "=" + bversion + " -y"
+			execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
+				AttachStdout: true,
+				AttachStderr: true,
+				Cmd:          []string{"sh", "-c", command},
+				Tty:          true,
+				Privileged:   true,
+			})
+			if err != nil {
+				buildError(pkgs, err, dir)
+				return nil
+			}
+
+			output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
+			if err != nil {
+				buildError(pkgs, err, dir)
+				return nil
+			}
+			io.Copy(io.Discard, output.Reader)
+			output.Close()
+		}
+		command := "cd " + pkgdir + " && chmod 777 ./*.deb"
+		execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
+			AttachStdout: true,
+			AttachStderr: true,
+			Cmd:          []string{"sh", "-c", command},
+			Tty:          true,
+			Privileged:   true,
+		})
+		if err != nil {
+			buildError(pkgs, err, dir)
+			return nil
+		}
+		output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
+		if err != nil {
+			buildError(pkgs, err, dir)
+			return nil
+		}
+		io.Copy(io.Discard, output.Reader)
+		output.Close()
+
+	} else {
+		command = "cd " + pkgdir + " && " + buildcmd + " *.dsc"
+		// Execute the command
+		execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
+			AttachStdout: true,
+			AttachStderr: true,
+			Cmd:          []string{"sh", "-c", command},
+			Tty:          true,
+			Privileged:   true,
+		})
+		if err != nil {
+			buildError(pkgs, err, dir)
+			return nil
+		}
+		// start the command
+		output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
+		if err != nil {
+			buildError(pkgs, err, dir)
+			return nil
+		}
+		io.Copy(io.Discard, output.Reader)
+		output.Close()
+	}
+
+	if runTimer {
+		timer.Stop()
+	}
+
 	if timeoutHit {
 		return nil
 	}
@@ -377,6 +431,7 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 		for _, pkg2 := range pkgs {
 			pkg2.Status = packages.Uptodate
 			pkg2.LastBuildStatus = packages.Built
+			pkg2.BuildAttempts = 0
 			pkg2.Version = buildVersion
 			packages.UpdatePackage(pkg2, true)
 		}
@@ -408,6 +463,7 @@ func checkBuild(pkgs []packages.PackageInfo, pkg packages.PackageInfo, dir strin
 	for _, entry := range entries {
 		if strings.Contains(entry.Name(), "dbgsym") || strings.Contains(entry.Name(), "source") {
 			os.Remove(dir + "/" + entry.Name())
+			buildErr = false
 			continue
 		}
 		if filepath.Ext(entry.Name()) == ".log" {
