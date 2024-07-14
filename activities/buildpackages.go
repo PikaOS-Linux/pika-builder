@@ -294,7 +294,9 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	buildcmd := "pika-pbuilder-amd64-v3-lto-build"
 	if config.Configs.LTOBlocklist != nil && slices.Contains(config.Configs.LTOBlocklist, pkg.Name) {
 		buildcmd = "pika-pbuilder-amd64-v3-build"
-	} else if pkg.BuildAttempts > 0 || pkg.LastBuildStatus == packages.Error {
+	} else if pkg.BuildAttempts > 2 && pkg.LastBuildStatus == packages.Built {
+		buildcmd = "find ./ -type f -name '*.dsc' bash -c 'dget -all ' {} \\;"
+	} else if pkg.BuildAttempts > 0 && pkg.LastBuildStatus == packages.Error {
 		buildcmd = "pika-pbuilder-amd64-v3-build"
 	}
 

@@ -315,7 +315,7 @@ func ProcessStalePackages(internalPackages map[string]PackageInfo, externalPacka
 			continue
 		}
 
-		splitver := strings.Split(v.Version, "+b")
+		splitver := strings.Split(v.Version, "+")
 		matchedVer, _ := version.Parse(matchedPackage.Version)
 		extVer, _ := version.Parse(splitver[0])
 		cmpVal := version.Compare(matchedVer, extVer)

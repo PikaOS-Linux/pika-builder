@@ -62,9 +62,9 @@ func runServer(ctx context.Context) error {
 
 	go startTemporalFetchWorker(c)
 	go startTemporalBuildWorker(c)
-	go starters.FetchPackagesNow(c, ctx)
+	//go starters.FetchPackagesNow(c, ctx)
 	go starters.ScheduleFetchPackages(c, ctx)
-	go starters.BuildPackagesNow(c, ctx)
+	//go starters.BuildPackagesNow(c, ctx)
 	go starters.ScheduleBuildPackages(c, ctx)
 
 	// Create a new server instance with options from environment variables.
