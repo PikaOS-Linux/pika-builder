@@ -68,6 +68,17 @@ func ProcessPackages() error {
 					pkg.PendingVersion = ""
 					updatedPackagesSlice = append(updatedPackagesSlice, pkg)
 				}
+				if pkg.Status == Missing && pkg2.Status == Missing {
+					pkg.PendingVersion = pkg2.PendingVersion
+					pkg.Version = pkg2.Version
+					updatedPackagesSlice = append(updatedPackagesSlice, pkg)
+				}
+				if pkg.Status == Stale && pkg2.Status == Missing {
+					pkg.PendingVersion = pkg2.PendingVersion
+					pkg.Version = pkg2.Version
+					pkg.Status = pkg2.Status
+					updatedPackagesSlice = append(updatedPackagesSlice, pkg)
+				}
 				if (pkg2.Status == Stale || pkg2.Status == Missing) && (pkg.Status == Uptodate || pkg.Status == Stale || pkg.Status == Built || pkg.Status == Error) {
 					pkg.PendingVersion = pkg2.PendingVersion
 					pkg.Status = pkg2.Status
@@ -293,9 +304,9 @@ func LoadExternalPackages(externalPackages map[string]PackageInfo) error {
 			return 0
 		}
 		if a.Priority < b.Priority {
-			return 1
+			return -1
 		}
-		return -1
+		return 1
 	})
 
 	for _, pkg := range config.Configs.ExternalPackageFiles {
