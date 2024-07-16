@@ -252,6 +252,7 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	if buildVersion == "" {
 		buildVersion = pkg.Version
 	}
+	buildVersion = strings.ReplaceAll(buildVersion, "⟨1⟩:", "")
 	for _, pkg2 := range pkgs {
 		pkg2.Status = packages.Building
 		pkg2.LastBuildVersion = buildVersion
@@ -283,6 +284,30 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 
 	// Attach to the command's output
 	output, err := cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
+	if err != nil {
+		buildError(pkgs, err, dir)
+		return nil
+	}
+
+	io.Copy(io.Discard, output.Reader)
+	output.Close()
+
+	command = "cd " + pkgdir + " && cd */ && rm -f ./debian/*.symbols && debuild -S"
+	// Execute the command
+	execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
+		AttachStdout: true,
+		AttachStderr: true,
+		Cmd:          []string{"sh", "-c", command},
+		Tty:          true,
+		Privileged:   true,
+	})
+	if err != nil {
+		buildError(pkgs, err, dir)
+		return nil
+	}
+
+	// Attach to the command's output
+	output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
 	if err != nil {
 		buildError(pkgs, err, dir)
 		return nil
@@ -349,6 +374,7 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 			if bversion == "" {
 				bversion = pkg3.Version
 			}
+			bversion = strings.ReplaceAll(bversion, "⟨1⟩:", "")
 			command := "cd " + pkgdir + " && eatmydata apt-get download " + pkg3.Name + "=" + bversion + " -y"
 			execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
 				AttachStdout: true,
