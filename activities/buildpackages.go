@@ -292,58 +292,11 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	io.Copy(io.Discard, output.Reader)
 	output.Close()
 
-	runTimer := true
-
 	buildcmd := "pika-pbuilder-amd64-v3-lto-build"
 	if config.Configs.LTOBlocklist != nil && slices.Contains(config.Configs.LTOBlocklist, pkg.Name) {
 		buildcmd = "pika-pbuilder-amd64-v3-build"
-	} else if pkg.BuildAttempts >= 2 && pkg.LastBuildStatus == packages.Error {
-		runTimer = false
 	} else if pkg.BuildAttempts > 0 && pkg.LastBuildStatus == packages.Error {
 		buildcmd = "pika-pbuilder-amd64-v3-build"
-	}
-
-	timeoutHit := false
-	done := make(chan bool)
-	var timer *time.Ticker
-	if runTimer {
-		timer = time.NewTicker(time.Minute * 45)
-		numChecks := 0
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-done:
-					return
-				case <-timer.C:
-					success := checkBuild(pkgs, pkg, dir)
-					if !success {
-						numChecks++
-						if numChecks > 1 {
-							fmt.Println("Timeout reached for " + pkg.Name)
-							buildError(pkgs, err, dir)
-							timeoutHit = true
-							output.Close()
-							timer.Stop()
-							os.RemoveAll(dir)
-							return
-						}
-					}
-					fmt.Println("Build succeeded for " + pkg.Name)
-					for _, pkg2 := range pkgs {
-						pkg2.Status = packages.Uptodate
-						pkg2.LastBuildStatus = packages.Built
-						pkg2.Version = buildVersion
-						packages.UpdatePackage(pkg2, true)
-					}
-					os.RemoveAll(dir)
-					output.Close()
-					timer.Stop()
-					return
-				}
-			}
-		}()
 	}
 
 	if pkg.BuildAttempts >= 2 && pkg.LastBuildStatus == packages.Error {
@@ -419,15 +372,6 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 		output.Close()
 	}
 
-	if runTimer {
-		timer.Stop()
-	}
-	done <- true
-
-	if timeoutHit {
-		return nil
-	}
-
 	if !checkBuild(pkgs, pkg, dir) {
 		fmt.Println("No build output for " + pkg.Name)
 		buildError(pkgs, err, dir)
@@ -472,7 +416,7 @@ func checkBuild(pkgs []packages.PackageInfo, pkg packages.PackageInfo, dir strin
 			continue
 		}
 		if filepath.Ext(entry.Name()) == ".log" {
-			cmd := exec.Command("/bin/sh", "-c", "mv "+dir+"/"+entry.Name()+" /srv/www/buildlogs/"+pkg.Name+"_"+entry.Name())
+			cmd := exec.Command("/bin/sh", "-c", "rsync -ah --progress --remove-source-files "+dir+"/"+entry.Name()+" /srv/www/buildlogs/"+pkg.Name+"_"+entry.Name())
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			cmd.Stdin = os.Stdin
@@ -490,7 +434,7 @@ func checkBuild(pkgs []packages.PackageInfo, pkg packages.PackageInfo, dir strin
 			}
 		}
 		if filepath.Ext(entry.Name()) == ".deb" {
-			cmd := exec.Command("/bin/sh", "-c", "mv "+dir+"/"+entry.Name()+" "+config.Configs.DeboutputDir+entry.Name())
+			cmd := exec.Command("/bin/sh", "-c", "rsync -ah --progress --remove-source-files "+dir+"/"+entry.Name()+" "+config.Configs.DeboutputDir+entry.Name())
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			cmd.Stdin = os.Stdin
