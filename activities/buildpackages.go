@@ -304,18 +304,23 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	}
 
 	timeoutHit := false
+	done := make(chan bool)
 	var timer *time.Ticker
 	if runTimer {
-		timer = time.NewTicker(time.Minute * 10)
+		timer = time.NewTicker(time.Minute * 45)
 		numChecks := 0
 		go func() {
 			for {
 				select {
+				case <-ctx.Done():
+					return
+				case <-done:
+					return
 				case <-timer.C:
 					success := checkBuild(pkgs, pkg, dir)
 					if !success {
 						numChecks++
-						if numChecks > 6 {
+						if numChecks > 1 {
 							fmt.Println("Timeout reached for " + pkg.Name)
 							buildError(pkgs, err, dir)
 							timeoutHit = true
@@ -336,8 +341,6 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 					output.Close()
 					timer.Stop()
 					return
-				default:
-					time.Sleep(time.Second * 10)
 				}
 			}
 		}()
@@ -419,6 +422,7 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	if runTimer {
 		timer.Stop()
 	}
+	done <- true
 
 	if timeoutHit {
 		return nil
