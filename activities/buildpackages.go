@@ -411,7 +411,7 @@ func checkBuild(pkgs []packages.PackageInfo, pkg packages.PackageInfo, dir strin
 		return true
 	}
 	for _, entry := range entries {
-		if strings.Contains(entry.Name(), "dbgsym") || strings.Contains(entry.Name(), "source") {
+		if strings.Contains(entry.Name(), "dbgsym") {
 			os.Remove(dir + "/" + entry.Name())
 			continue
 		}

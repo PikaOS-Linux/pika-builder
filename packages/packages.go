@@ -68,6 +68,12 @@ func ProcessPackages() error {
 					pkg.PendingVersion = ""
 					updatedPackagesSlice = append(updatedPackagesSlice, pkg)
 				}
+				if pkg.Status == Missing && pkg2.Status != Missing {
+					pkg.PendingVersion = pkg2.PendingVersion
+					pkg.Version = pkg2.Version
+					pkg.Status = pkg2.Status
+					updatedPackagesSlice = append(updatedPackagesSlice, pkg)
+				}
 				if pkg.Status == Missing && pkg2.Status == Missing {
 					pkg.PendingVersion = pkg2.PendingVersion
 					pkg.Version = pkg2.Version
@@ -342,7 +348,7 @@ func ProcessStalePackages(internalPackages map[string]PackageInfo, externalPacka
 			continue
 		}
 
-		splitver := strings.Split(v.Version, "+")
+		splitver := strings.Split(v.Version, "+b")
 		matchedVer, _ := version.Parse(matchedPackage.Version)
 		extVer, _ := version.Parse(splitver[0])
 		cmpVal := version.Compare(matchedVer, extVer)
