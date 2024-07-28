@@ -292,22 +292,43 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 	io.Copy(io.Discard, output.Reader)
 	output.Close()
 
-	buildcmd := "pika-pbuilder-amd64-v3-lto-build"
-	if config.Configs.LTOBlocklist != nil && slices.Contains(config.Configs.LTOBlocklist, pkg.Name) {
-		buildcmd = "pika-pbuilder-amd64-v3-build"
-	} else if pkg.BuildAttempts > 0 && pkg.LastBuildStatus == packages.Error {
-		buildcmd = "pika-pbuilder-amd64-v3-build"
-	}
+	loopNum := 0
 
-	if pkg.BuildAttempts >= 2 && pkg.LastBuildStatus == packages.Error {
-		fmt.Println("Falling back to upstream for: " + pkg.Name)
-		for _, pkg3 := range pkgs {
-			bversion := pkg3.PendingVersion
-			if bversion == "" {
-				bversion = pkg3.Version
+	for loopNum < 4 {
+		loopNum++
+		buildcmd := "pika-pbuilder-amd64-v3-lto-build"
+		if config.Configs.LTOBlocklist != nil && slices.Contains(config.Configs.LTOBlocklist, pkg.Name) || loopNum == 2 {
+			buildcmd = "pika-pbuilder-amd64-v3-build"
+		}
+
+		if loopNum == 3 && config.Configs.UpstreamFallback {
+			fmt.Println("Falling back to upstream for: " + pkg.Name)
+			for _, pkg3 := range pkgs {
+				bversion := pkg3.PendingVersion
+				if bversion == "" {
+					bversion = pkg3.Version
+				}
+				bversion = strings.ReplaceAll(bversion, "⟨1⟩:", "1:")
+				command := "cd " + pkgdir + " && eatmydata apt-get download " + pkg3.Name + "=" + bversion + " -y"
+				execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
+					AttachStdout: true,
+					AttachStderr: true,
+					Cmd:          []string{"sh", "-c", command},
+					Tty:          true,
+					Privileged:   true,
+				})
+				if err != nil {
+					continue
+				}
+
+				output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
+				if err != nil {
+					continue
+				}
+				io.Copy(io.Discard, output.Reader)
+				output.Close()
 			}
-			bversion = strings.ReplaceAll(bversion, "⟨1⟩:", "1:")
-			command := "cd " + pkgdir + " && eatmydata apt-get download " + pkg3.Name + "=" + bversion + " -y"
+			command := "cd " + pkgdir + " && chmod 777 ./*.deb"
 			execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
 				AttachStdout: true,
 				AttachStderr: true,
@@ -316,77 +337,58 @@ func buildPackage(ctx context.Context, pkgs []packages.PackageInfo, cli *client.
 				Privileged:   true,
 			})
 			if err != nil {
-				buildError(pkgs, err, dir)
-				return nil
+				continue
 			}
-
 			output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
 			if err != nil {
-				buildError(pkgs, err, dir)
-				return nil
+				continue
+			}
+			io.Copy(io.Discard, output.Reader)
+			output.Close()
+		} else {
+			command = "cd " + pkgdir + " && " + buildcmd + " *.dsc"
+			// Execute the command
+			execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
+				AttachStdout: true,
+				AttachStderr: true,
+				Cmd:          []string{"sh", "-c", command},
+				Tty:          true,
+				Privileged:   true,
+			})
+			if err != nil {
+				continue
+			}
+			// start the command
+			output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
+			if err != nil {
+				continue
 			}
 			io.Copy(io.Discard, output.Reader)
 			output.Close()
 		}
-		command := "cd " + pkgdir + " && chmod 777 ./*.deb"
-		execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
-			AttachStdout: true,
-			AttachStderr: true,
-			Cmd:          []string{"sh", "-c", command},
-			Tty:          true,
-			Privileged:   true,
-		})
-		if err != nil {
-			buildError(pkgs, err, dir)
-			return nil
-		}
-		output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
-		if err != nil {
-			buildError(pkgs, err, dir)
-			return nil
-		}
-		io.Copy(io.Discard, output.Reader)
-		output.Close()
 
-	} else {
-		command = "cd " + pkgdir + " && " + buildcmd + " *.dsc"
-		// Execute the command
-		execResp, err = cli.ContainerExecCreate(ctx, respid, types.ExecConfig{
-			AttachStdout: true,
-			AttachStderr: true,
-			Cmd:          []string{"sh", "-c", command},
-			Tty:          true,
-			Privileged:   true,
-		})
-		if err != nil {
-			buildError(pkgs, err, dir)
-			return nil
+		if !checkBuild(pkgs, pkg, dir) {
+			fmt.Println("No build output for " + pkg.Name)
+			continue
+		} else {
+			fmt.Println("Build succeeded for " + pkg.Name)
+			for _, pkg2 := range pkgs {
+				pkg2.Status = packages.Uptodate
+				pkg2.LastBuildStatus = packages.Built
+				pkg2.BuildAttempts = 0
+				pkg2.Version = buildVersion
+				packages.UpdatePackage(pkg2, true)
+			}
 		}
-		// start the command
-		output, err = cli.ContainerExecAttach(ctx, execResp.ID, types.ExecStartCheck{Tty: true})
-		if err != nil {
-			buildError(pkgs, err, dir)
-			return nil
-		}
-		io.Copy(io.Discard, output.Reader)
-		output.Close()
+		os.RemoveAll(dir)
+		return nil
 	}
 
-	if !checkBuild(pkgs, pkg, dir) {
-		fmt.Println("No build output for " + pkg.Name)
+	if loopNum > 2 {
 		buildError(pkgs, err, dir)
 		return nil
-	} else {
-		fmt.Println("Build succeeded for " + pkg.Name)
-		for _, pkg2 := range pkgs {
-			pkg2.Status = packages.Uptodate
-			pkg2.LastBuildStatus = packages.Built
-			pkg2.BuildAttempts = 0
-			pkg2.Version = buildVersion
-			packages.UpdatePackage(pkg2, true)
-		}
 	}
-	os.RemoveAll(dir)
+
 	return nil
 }
 

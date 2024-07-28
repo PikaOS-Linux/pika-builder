@@ -35,6 +35,7 @@ type Config struct {
 	SurrealUsername      string        `json:"surrealUsername"`
 	SurrealPassword      string        `json:"surrealPassword"`
 	TemporalUrl          string        `json:"temporalUrl"`
+	UpstreamFallback     bool          `json:"upstreamFallback"`
 	LocalPackageFiles    []PackageFile `json:"localPackageFiles"`
 	ExternalPackageFiles []PackageFile `json:"externalPackageFiles"`
 	LTOBlocklist         []string      `json:"ltoBlocklist"`
